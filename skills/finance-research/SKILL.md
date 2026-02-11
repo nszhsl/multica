@@ -1,7 +1,7 @@
 ---
 name: Finance Research
-description: Conduct financial research and analysis including stock analysis, company fundamentals, SEC filings review, and market data retrieval. Use when the user asks about stocks, financial statements, company performance, market data, or investment analysis.
-version: 1.0.0
+description: Conduct analyst-grade financial research across primary and secondary markets using structured financial data plus macro and public-information cross-checks.
+version: 1.1.0
 metadata:
   emoji: "\U0001F4CA"
   requires:
@@ -12,13 +12,15 @@ metadata:
     - research
     - stocks
     - data
+    - macro
+    - sentiment
 userInvocable: true
 disableModelInvocation: false
 ---
 
 ## Instructions
 
-You are conducting financial research using real market data. Use the `data` tool with `domain="finance"` and the appropriate action.
+You are conducting financial research with an analyst-grade standard. Do not rely on a single source. Combine structured company data with external macro/policy/news context whenever the conclusion can be affected by market regime or recent events.
 
 ### Available Data Actions
 
@@ -48,44 +50,108 @@ Actions:
 
 #### Company Info
 - `get_company_facts` — Sector, industry, employees, exchange, website. Params: `{ ticker }`
-- `get_news` — Recent news articles. Params: `{ ticker, start_date?, end_date?, limit? }`
+- `get_news` — Recent company news articles. Params: `{ ticker, start_date?, end_date?, limit? }`
 - `get_insider_trades` — Insider buying/selling (SEC Form 4). Params: `{ ticker, limit?, filing_date*? }`
 - `get_segmented_revenues` — Revenue by segment/geography. Params: `{ ticker, period, limit? }`
 
 #### SEC Filings
 - `get_filings` — List filings metadata. Params: `{ ticker, filing_type?, limit? }`
-  - filing_type: "10-K", "10-Q", "8-K"
-- `get_filing_items` — Read specific filing sections. Params: `{ ticker, filing_type, accession_number?, item? }`
-  - item: array of section names (e.g. ["Item-1A", "Item-7"] for 10-K)
+- `get_filing_items` — Read filing sections. Params: `{ ticker, filing_type, accession_number?, item? }`
 
-### Research Workflow
+### Mandatory Multi-Source Framework
 
-1. **Understand** what financial data is needed
-2. **Get context** — start with `get_price_snapshot` and `get_company_facts` for orientation
-3. **Gather data** — use the appropriate actions for the analysis
-4. **Analyze** — interpret data with proper financial reasoning
-5. **Present** — clear findings with data tables and key takeaways
+Use this structure by default for finance analysis tasks.
 
-### Best Practices
+1. **Scope & Market Type**
+- Identify if this is primary market (IPO, pre-IPO, follow-on, placement) or secondary market (listed stock/sector/index).
+- State region and analysis horizon (event-driven, 3-6 months, 1-3 years).
 
-- Use `get_all_financial_statements` when you need multiple statement types (saves API calls)
-- Use annual data for trend analysis, quarterly for recent performance, TTM for current state
-- Cross-reference metrics: revenue growth vs cash flow growth, margins vs peers
-- Always note the time period and currency when presenting financial data
-- For SEC filing analysis: first `get_filings` to find relevant filings, then `get_filing_items` to read specific sections
-- Common 10-K items: Item-1 (Business), Item-1A (Risk Factors), Item-7 (MD&A), Item-8 (Financial Statements)
-- Common 10-Q items: Part-1,Item-1 (Financial Statements), Part-1,Item-2 (MD&A)
+2. **Core Company Data (Structured)**
+- Start with: `get_price_snapshot`, `get_company_facts`, `get_financial_metrics_snapshot`.
+- Pull statements (`get_all_financial_statements`) and estimates as needed.
 
-### Example: Company Analysis
+3. **Macro & Policy Context (External)**
+- Use `web_search` for current policy/rates/inflation/liquidity context relevant to the asset.
+- Use `web_fetch` to read high-signal primary sources (central bank, regulator, official releases).
+- For time-sensitive analysis, include at least 2 external macro/policy signals with dates.
 
-For "Analyze Apple's financial health":
+4. **News & Sentiment Context (Hybrid)**
+- Pull `get_news` for company-linked coverage.
+- Use `web_search` to cross-check major events, management guidance changes, supply-chain/regulatory headlines, and consensus narrative.
 
-```
-1. data(domain="finance", action="get_price_snapshot", params={ticker: "AAPL"})
-2. data(domain="finance", action="get_company_facts", params={ticker: "AAPL"})
-3. data(domain="finance", action="get_all_financial_statements", params={ticker: "AAPL", period: "annual", limit: 3})
-4. data(domain="finance", action="get_financial_metrics_snapshot", params={ticker: "AAPL"})
-5. data(domain="finance", action="get_analyst_estimates", params={ticker: "AAPL"})
-```
+5. **Synthesis & Decision**
+- Separate **facts**, **inference**, and **assumptions**.
+- Build bull/base/bear scenarios with explicit trigger conditions.
+- Provide confidence level and explain the main uncertainty drivers.
 
-Then analyze trends, margins, growth rates, and present findings.
+### Primary Market (一级市场) Workflow
+
+When asked about IPOs, pre-IPO, or new issuance:
+
+1. **Deal Basics**
+- Identify issuer, listing venue, offering structure (primary/secondary shares), expected timeline.
+
+2. **Filing/Prospectus Review**
+- Prefer official documents (e.g., S-1/F-1/prospectus) via `web_search` + `web_fetch`.
+- Extract: use of proceeds, customer concentration, related-party transactions, share classes, lock-up, dilution risks.
+
+3. **Valuation & Comparable Set**
+- Build peer set from listed comps (secondary market tickers) and compare growth, margin, and valuation multiples.
+- Flag gaps between issuer narrative and peer reality.
+
+4. **Deal Risk Map**
+- Highlight red flags: weak FCF quality, aggressive non-GAAP adjustments, concentrated revenue, regulatory overhang.
+- Provide post-listing watch items: lock-up expiry, first earnings, guidance revisions.
+
+### Secondary Market (二级市场) Workflow
+
+When asked about listed equities:
+
+1. **Trend & Positioning**
+- Pull 1y price history (`get_prices`) and identify regime (uptrend/range/downtrend) with volatility context.
+
+2. **Fundamentals**
+- Analyze growth quality (revenue vs FCF), margin durability, leverage, and capital allocation.
+
+3. **Valuation**
+- Compare current multiples to historical bands and peers (when peer data is available).
+- Connect valuation premium/discount to expected growth and risk profile.
+
+4. **Catalysts & Risks**
+- Earnings, guidance, product cycle, policy changes, rates/FX/commodity sensitivity, insider activity.
+
+### Output Standard
+
+Always include:
+
+1. **Executive Summary** (thesis + stance + confidence)
+2. **Evidence Table** with columns:
+- Signal
+- Direction (Bull/Bear/Neutral)
+- Why it matters
+- Source
+- Date
+3. **Scenario Table** (bull/base/bear with probabilities or relative weights)
+4. **Key Monitoring Triggers** (what would invalidate current thesis)
+
+### Guardrails
+
+- Always state data cutoff dates.
+- If data is missing, explicitly mark it and show the impact on confidence.
+- Do not present assumptions as facts.
+- Prefer source diversity: structured finance data + at least one external source for event-driven conclusions.
+
+### Example: Secondary Market Analysis
+
+For "Analyze Apple's investment outlook":
+
+1. `data(domain="finance", action="get_price_snapshot", params={ticker: "AAPL"})`
+2. `data(domain="finance", action="get_company_facts", params={ticker: "AAPL"})`
+3. `data(domain="finance", action="get_all_financial_statements", params={ticker: "AAPL", period: "annual", limit: 3})`
+4. `data(domain="finance", action="get_financial_metrics", params={ticker: "AAPL", period: "quarterly", limit: 8})`
+5. `data(domain="finance", action="get_analyst_estimates", params={ticker: "AAPL", period: "annual"})`
+6. `data(domain="finance", action="get_news", params={ticker: "AAPL", limit: 10})`
+7. `web_search(query="latest Fed policy decision impact on US mega-cap tech valuations")`
+8. `web_search(query="Apple supply chain or regulatory news latest quarter")`
+
+Then synthesize fundamental trend, macro regime, and event sentiment into a scenario-based conclusion.

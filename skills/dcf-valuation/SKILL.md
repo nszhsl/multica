@@ -1,7 +1,7 @@
 ---
 name: DCF Valuation
 description: Perform Discounted Cash Flow (DCF) valuation analysis for public companies. Use when the user asks to value a stock, calculate intrinsic value, fair value, perform DCF analysis, determine if a stock is undervalued or overvalued, or estimate a price target.
-version: 1.0.0
+version: 1.1.0
 metadata:
   emoji: "\U0001F9EE"
   requires:
@@ -17,7 +17,7 @@ disableModelInvocation: false
 
 ## Instructions
 
-Perform a rigorous Discounted Cash Flow (DCF) valuation. Follow all steps and show your work.
+Perform a rigorous Discounted Cash Flow (DCF) valuation. Follow all steps and show your work. Use external macro context when assumptions are time-sensitive (for example, risk-free rate regime shifts).
 
 ### Progress Checklist
 
@@ -86,6 +86,14 @@ Use `data` tool with `domain="finance"` for all calls:
    ```
    Extract: `sector` — use to determine WACC range from [sector-wacc.md](references/sector-wacc.md)
 
+8. **Recent Event Context**:
+- Pull company-specific headlines with:
+  ```
+  action: "get_news"
+  params: { ticker: "[TICKER]", limit: 10 }
+  ```
+- Use this to flag event risk (guidance reset, litigation, regulation, one-off gains/losses) that may distort near-term FCF extrapolation.
+
 ### Step 2: Calculate Historical FCF and Growth
 
 - Compute FCF for each of the last 5 years
@@ -112,7 +120,7 @@ Where:
 ```
 
 **Default assumptions:**
-- Risk-free rate: ~4.0-4.5% (10-year Treasury)
+- Risk-free rate: pull latest 10-year Treasury yield using `web_search` (preferred) and cite date/source. Fallback range: ~4.0-4.5%.
 - Equity risk premium: ~5.5%
 - If beta unavailable, use sector average
 
