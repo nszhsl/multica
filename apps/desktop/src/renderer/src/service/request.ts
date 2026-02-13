@@ -1,7 +1,7 @@
 import { useAuthStore } from '../stores/auth'
 
-// Backend API host — change this when switching environments
-const API_HOST = 'https://api.multica.ai'
+// Backend API host — driven by RENDERER_VITE_API_URL env var (set in .env.production / .env.development)
+const API_HOST = import.meta.env.RENDERER_VITE_API_URL || 'https://api.multica.ai'
 
 /**
  * Fetch request wrapper for desktop app.
