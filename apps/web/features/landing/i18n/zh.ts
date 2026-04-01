@@ -273,6 +273,22 @@ export const zh: LandingDict = {
     subtitle: "Multica \u7684\u6700\u65b0\u66f4\u65b0\u548c\u6539\u8fdb\u3002",
     entries: [
       {
+        version: "0.1.4",
+        date: "2026-04-01",
+        title: "\u6211\u7684 Issue \u4e0e\u56fd\u9645\u5316",
+        changes: [
+          "\u6211\u7684 Issue \u9875\u9762\uff0c\u652f\u6301\u770b\u677f\u3001\u5217\u8868\u89c6\u56fe\u548c\u8303\u56f4\u6807\u7b7e",
+          "\u843d\u5730\u9875\u65b0\u589e\u7b80\u4f53\u4e2d\u6587\u672c\u5730\u5316",
+          "\u65b0\u589e\u5173\u4e8e\u9875\u9762\u548c\u66f4\u65b0\u65e5\u5fd7\u9875\u9762",
+          "Agent \u8bbe\u7f6e\u9875\u652f\u6301\u5934\u50cf\u4e0a\u4f20",
+          "CLI \u8bc4\u8bba\u548c Issue/\u8bc4\u8bba API \u7684\u9644\u4ef6\u652f\u6301",
+          "\u7edf\u4e00\u5934\u50cf\u6e32\u67d3\uff0c\u6240\u6709\u9009\u62e9\u5668\u4f7f\u7528 ActorAvatar \u7ec4\u4ef6",
+          "\u843d\u5730\u9875 SEO \u4f18\u5316\u548c\u767b\u5f55\u6d41\u7a0b\u6539\u8fdb",
+          "CLI \u9ed8\u8ba4\u4f7f\u7528\u751f\u4ea7\u73af\u5883 API \u5730\u5740",
+          "\u8bb8\u53ef\u8bc1\u53d8\u66f4\u4e3a Apache 2.0",
+        ],
+      },
+      {
         version: "0.1.3",
         date: "2026-03-31",
         title: "Agent \u667a\u80fd",

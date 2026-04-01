@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,14 +14,10 @@ import (
 // causing the server to resolve the actor as an agent instead of a member.
 func authRequestWithAgent(t *testing.T, method, path string, body any, agentID string) *http.Response {
 	t.Helper()
-	resp := authRequest(t, method, path, body)
-	// We can't add headers after authRequest, so we build it manually:
-	resp.Body.Close()
-
 	var bodyReader io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
-		bodyReader = &readCloserWrapper{data: b}
+		bodyReader = bytes.NewReader(b)
 	}
 	req, err := http.NewRequest(method, testServer.URL+path, bodyReader)
 	if err != nil {
@@ -36,20 +33,6 @@ func authRequestWithAgent(t *testing.T, method, path string, body any, agentID s
 		t.Fatalf("request failed: %v", err)
 	}
 	return r
-}
-
-type readCloserWrapper struct {
-	data []byte
-	pos  int
-}
-
-func (r *readCloserWrapper) Read(p []byte) (int, error) {
-	if r.pos >= len(r.data) {
-		return 0, io.EOF
-	}
-	n := copy(p, r.data[r.pos:])
-	r.pos += n
-	return n, nil
 }
 
 // countPendingTasks returns the number of queued/dispatched tasks for an issue.
@@ -245,6 +228,35 @@ func TestCommentTriggerOnComment(t *testing.T) {
 		}
 		if n := countPendingTasks(t, issueID); n != 1 {
 			t.Errorf("expected 1 pending task (assignee mentioned in member thread), got %d", n)
+		}
+	})
+}
+
+// TestCommentTriggerAtAllSuppression verifies that @all mentions do not
+// trigger agent execution — @all is a broadcast, not a direct request.
+func TestCommentTriggerAtAllSuppression(t *testing.T) {
+	agentID := getAgentID(t)
+	issueID := createIssueAssignedToAgent(t, "@all suppression test", agentID)
+	t.Cleanup(func() {
+		clearTasks(t, issueID)
+		resp := authRequest(t, "DELETE", "/api/issues/"+issueID, nil)
+		resp.Body.Close()
+	})
+
+	t.Run("top-level @all comment suppresses on_comment", func(t *testing.T) {
+		clearTasks(t, issueID)
+		postComment(t, issueID, "[@All](mention://all/all) heads up everyone", nil)
+		if n := countPendingTasks(t, issueID); n != 0 {
+			t.Errorf("expected 0 pending tasks (@all should not trigger agent), got %d", n)
+		}
+	})
+
+	t.Run("@all in agent thread suppresses on_comment", func(t *testing.T) {
+		clearTasks(t, issueID)
+		threadID := postCommentAsAgent(t, issueID, "Here is my analysis.", agentID, nil)
+		postComment(t, issueID, "[@All](mention://all/all) FYI for the team", strPtr(threadID))
+		if n := countPendingTasks(t, issueID); n != 0 {
+			t.Errorf("expected 0 pending tasks (@all in agent thread), got %d", n)
 		}
 	})
 }

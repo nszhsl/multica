@@ -273,6 +273,22 @@ export const en: LandingDict = {
     subtitle: "New updates and improvements to Multica.",
     entries: [
       {
+        version: "0.1.4",
+        date: "2026-04-01",
+        title: "My Issues & i18n",
+        changes: [
+          "My Issues page with kanban board, list view, and scope tabs",
+          "Simplified Chinese localization for the landing page",
+          "About and Changelog pages for the marketing site",
+          "Agent avatar upload in settings",
+          "Attachment support for CLI comments and issue/comment APIs",
+          "Unified avatar rendering with ActorAvatar across all pickers",
+          "SEO optimization and auth flow improvements for landing pages",
+          "CLI defaults to production API URLs",
+          "License changed to Apache 2.0",
+        ],
+      },
+      {
         version: "0.1.3",
         date: "2026-03-31",
         title: "Agent Intelligence",

@@ -76,6 +76,16 @@ func TestCommentMentionsOthersButNotAssignee(t *testing.T) {
 			content: fmt.Sprintf("[@Agent](mention://agent/%s) and [@Other](mention://agent/%s)", agentAssigneeID, otherAgentID),
 			want:    false,
 		},
+		{
+			name:    "@all mention → suppress (broadcast, not directed at agent)",
+			content: "[@All](mention://all/all) heads up everyone",
+			want:    true,
+		},
+		{
+			name:    "@all with assignee mention → suppress (@all takes precedence)",
+			content: fmt.Sprintf("[@All](mention://all/all) [@Agent](mention://agent/%s) fyi", agentAssigneeID),
+			want:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -203,6 +213,9 @@ func TestOnCommentTriggerDecision(t *testing.T) {
 		{"reply member thread, no mention", memberParent, "agreed", false},
 		{"reply member thread, mention other member", memberParent, fmt.Sprintf("[@Bob](mention://member/%s) ok", memberID), false},
 		{"reply member thread, mention assignee", memberParent, fmt.Sprintf("[@Agent](mention://agent/%s) help", agentAssigneeID), true},
+		{"top-level, @all broadcast", nil, "[@All](mention://all/all) heads up team", false},
+		{"reply agent thread, @all broadcast", agentParent, "[@All](mention://all/all) update for everyone", false},
+		{"reply member thread, @all broadcast", memberParent, "[@All](mention://all/all) fyi", false},
 	}
 
 	for _, tt := range tests {
