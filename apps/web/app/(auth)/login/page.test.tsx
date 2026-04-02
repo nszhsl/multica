@@ -50,7 +50,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     expect(screen.getByText("Multica")).toBeInTheDocument();
-    expect(screen.getByText("AI-native task management")).toBeInTheDocument();
+    expect(screen.getByText("Turn coding agents into real teammates")).toBeInTheDocument();
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Continue" })
