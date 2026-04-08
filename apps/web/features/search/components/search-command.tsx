@@ -62,7 +62,7 @@ export function SearchCommand() {
       const controller = new AbortController();
       abortRef.current = controller;
       try {
-        const res = await api.searchIssues({ q: q.trim(), limit: 20 });
+        const res = await api.searchIssues({ q: q.trim(), limit: 20, signal: controller.signal });
         if (!controller.signal.aborted) {
           setResults(res.issues);
           setIsLoading(false);

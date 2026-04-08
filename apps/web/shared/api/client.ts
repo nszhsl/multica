@@ -176,11 +176,12 @@ export class ApiClient {
     return this.fetch(`/api/issues?${search}`);
   }
 
-  async searchIssues(params: { q: string; limit?: number; offset?: number }): Promise<ListIssuesResponse> {
+  async searchIssues(params: { q: string; limit?: number; offset?: number; include_closed?: boolean; signal?: AbortSignal }): Promise<ListIssuesResponse> {
     const search = new URLSearchParams({ q: params.q });
-    if (params.limit) search.set("limit", String(params.limit));
-    if (params.offset) search.set("offset", String(params.offset));
-    return this.fetch(`/api/issues/search?${search}`);
+    if (params.limit !== undefined) search.set("limit", String(params.limit));
+    if (params.offset !== undefined) search.set("offset", String(params.offset));
+    if (params.include_closed) search.set("include_closed", "true");
+    return this.fetch(`/api/issues/search?${search}`, params.signal ? { signal: params.signal } : undefined);
   }
 
   async getIssue(id: string): Promise<Issue> {

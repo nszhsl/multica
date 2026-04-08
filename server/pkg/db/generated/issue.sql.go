@@ -381,29 +381,54 @@ func (q *Queries) ListOpenIssues(ctx context.Context, arg ListOpenIssuesParams) 
 }
 
 const searchIssues = `-- name: SearchIssues :many
-SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number FROM issue
+SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, COUNT(*) OVER() AS total_count FROM issue
 WHERE workspace_id = $1
   AND (
     title LIKE '%' || $2 || '%'
     OR COALESCE(description, '') LIKE '%' || $2 || '%'
   )
+  AND ($3::boolean OR status NOT IN ('done', 'cancelled'))
 ORDER BY
   CASE WHEN title LIKE '%' || $2 || '%' THEN 0 ELSE 1 END,
   updated_at DESC
-LIMIT $4 OFFSET $3
+LIMIT $5 OFFSET $4
 `
 
 type SearchIssuesParams struct {
-	WorkspaceID  pgtype.UUID `json:"workspace_id"`
-	Query        pgtype.Text `json:"query"`
-	SearchOffset int32       `json:"search_offset"`
-	SearchLimit  int32       `json:"search_limit"`
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	Query         pgtype.Text `json:"query"`
+	IncludeClosed bool        `json:"include_closed"`
+	SearchOffset  int32       `json:"search_offset"`
+	SearchLimit   int32       `json:"search_limit"`
 }
 
-func (q *Queries) SearchIssues(ctx context.Context, arg SearchIssuesParams) ([]Issue, error) {
+type SearchIssuesRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	Title              string             `json:"title"`
+	Description        pgtype.Text        `json:"description"`
+	Status             string             `json:"status"`
+	Priority           string             `json:"priority"`
+	AssigneeType       pgtype.Text        `json:"assignee_type"`
+	AssigneeID         pgtype.UUID        `json:"assignee_id"`
+	CreatorType        string             `json:"creator_type"`
+	CreatorID          pgtype.UUID        `json:"creator_id"`
+	ParentIssueID      pgtype.UUID        `json:"parent_issue_id"`
+	AcceptanceCriteria []byte             `json:"acceptance_criteria"`
+	ContextRefs        []byte             `json:"context_refs"`
+	Position           float64            `json:"position"`
+	DueDate            pgtype.Timestamptz `json:"due_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	Number             int32              `json:"number"`
+	TotalCount         int64              `json:"total_count"`
+}
+
+func (q *Queries) SearchIssues(ctx context.Context, arg SearchIssuesParams) ([]SearchIssuesRow, error) {
 	rows, err := q.db.Query(ctx, searchIssues,
 		arg.WorkspaceID,
 		arg.Query,
+		arg.IncludeClosed,
 		arg.SearchOffset,
 		arg.SearchLimit,
 	)
@@ -411,9 +436,9 @@ func (q *Queries) SearchIssues(ctx context.Context, arg SearchIssuesParams) ([]I
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Issue{}
+	items := []SearchIssuesRow{}
 	for rows.Next() {
-		var i Issue
+		var i SearchIssuesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.WorkspaceID,
@@ -433,6 +458,7 @@ func (q *Queries) SearchIssues(ctx context.Context, arg SearchIssuesParams) ([]I
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Number,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -442,27 +468,6 @@ func (q *Queries) SearchIssues(ctx context.Context, arg SearchIssuesParams) ([]I
 		return nil, err
 	}
 	return items, nil
-}
-
-const searchIssuesCount = `-- name: SearchIssuesCount :one
-SELECT COUNT(*) FROM issue
-WHERE workspace_id = $1
-  AND (
-    title LIKE '%' || $2 || '%'
-    OR COALESCE(description, '') LIKE '%' || $2 || '%'
-  )
-`
-
-type SearchIssuesCountParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	Query       pgtype.Text `json:"query"`
-}
-
-func (q *Queries) SearchIssuesCount(ctx context.Context, arg SearchIssuesCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, searchIssuesCount, arg.WorkspaceID, arg.Query)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const updateIssue = `-- name: UpdateIssue :one

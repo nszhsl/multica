@@ -189,6 +189,7 @@ func init() {
 
 	// issue search
 	issueSearchCmd.Flags().Int("limit", 20, "Maximum number of results to return")
+	issueSearchCmd.Flags().Bool("include-closed", false, "Include done and cancelled issues")
 	issueSearchCmd.Flags().String("output", "table", "Output format: table or json")
 }
 
@@ -811,6 +812,9 @@ func runIssueSearch(cmd *cobra.Command, args []string) error {
 	params.Set("q", args[0])
 	if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
 		params.Set("limit", fmt.Sprintf("%d", v))
+	}
+	if v, _ := cmd.Flags().GetBool("include-closed"); v {
+		params.Set("include_closed", "true")
 	}
 
 	path := "/api/issues/search?" + params.Encode()

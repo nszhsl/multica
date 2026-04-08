@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -62,6 +63,14 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 	}
 }
 
+// escapeLike escapes LIKE special characters (%, _, \) in user input.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	workspaceID := resolveWorkspaceID(r)
@@ -88,14 +97,17 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	wsUUID := parseUUID(workspaceID)
-	queryText := strToText(q)
+	includeClosed := r.URL.Query().Get("include_closed") == "true"
 
-	issues, err := h.Queries.SearchIssues(ctx, db.SearchIssuesParams{
-		WorkspaceID:  wsUUID,
-		Query:        queryText,
-		SearchLimit:  int32(limit),
-		SearchOffset: int32(offset),
+	wsUUID := parseUUID(workspaceID)
+	queryText := strToText(escapeLike(q))
+
+	rows, err := h.Queries.SearchIssues(ctx, db.SearchIssuesParams{
+		WorkspaceID:   wsUUID,
+		Query:         queryText,
+		SearchLimit:   int32(limit),
+		SearchOffset:  int32(offset),
+		IncludeClosed: includeClosed,
 	})
 	if err != nil {
 		slog.Warn("search issues failed", "error", err, "workspace_id", workspaceID, "query", q)
@@ -103,20 +115,15 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.Queries.SearchIssuesCount(ctx, db.SearchIssuesCountParams{
-		WorkspaceID: wsUUID,
-		Query:       queryText,
-	})
-	if err != nil {
-		slog.Warn("search issues count failed", "error", err, "workspace_id", workspaceID, "query", q)
-		writeError(w, http.StatusInternalServerError, "failed to search issues")
-		return
+	var total int64
+	if len(rows) > 0 {
+		total = rows[0].TotalCount
 	}
 
 	prefix := h.getIssuePrefix(ctx, wsUUID)
-	resp := make([]IssueResponse, len(issues))
-	for i, issue := range issues {
-		resp[i] = issueToResponse(issue, prefix)
+	resp := make([]IssueResponse, len(rows))
+	for i, row := range rows {
+		resp[i] = issueToResponse(searchRowToIssue(row), prefix)
 	}
 
 	w.Header().Set("X-Total-Count", strconv.FormatInt(total, 10))
@@ -124,6 +131,29 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 		"issues": resp,
 		"total":  total,
 	})
+}
+
+func searchRowToIssue(row db.SearchIssuesRow) db.Issue {
+	return db.Issue{
+		ID:                 row.ID,
+		WorkspaceID:        row.WorkspaceID,
+		Title:              row.Title,
+		Description:        row.Description,
+		Status:             row.Status,
+		Priority:           row.Priority,
+		AssigneeType:       row.AssigneeType,
+		AssigneeID:         row.AssigneeID,
+		CreatorType:        row.CreatorType,
+		CreatorID:          row.CreatorID,
+		ParentIssueID:      row.ParentIssueID,
+		AcceptanceCriteria: row.AcceptanceCriteria,
+		ContextRefs:        row.ContextRefs,
+		Position:           row.Position,
+		DueDate:            row.DueDate,
+		CreatedAt:          row.CreatedAt,
+		UpdatedAt:          row.UpdatedAt,
+		Number:             row.Number,
+	}
 }
 
 func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
