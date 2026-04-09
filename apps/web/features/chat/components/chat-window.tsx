@@ -170,8 +170,8 @@ export function ChatWindow() {
       );
 
       const result = await api.sendChatMessage(sessionId, content);
-      qc.invalidateQueries({ queryKey: chatKeys.messages(sessionId) });
       setPendingTask(result.task_id);
+      qc.invalidateQueries({ queryKey: chatKeys.messages(sessionId) });
     },
     [
       activeSessionId,
