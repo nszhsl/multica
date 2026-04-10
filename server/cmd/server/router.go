@@ -202,6 +202,14 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus) chi.Route
 				})
 			})
 
+			// Pins
+			r.Route("/api/pins", func(r chi.Router) {
+				r.Get("/", h.ListPins)
+				r.Post("/", h.CreatePin)
+				r.Put("/reorder", h.ReorderPins)
+				r.Delete("/{itemType}/{itemId}", h.DeletePin)
+			})
+
 			// Attachments
 			r.Get("/api/attachments/{id}", h.GetAttachmentByID)
 			r.Delete("/api/attachments/{id}", h.DeleteAttachment)

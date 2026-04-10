@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef } from "react";
-import { Check, ChevronRight, Link2, ListTodo, MoreHorizontal, Trash2, UserMinus } from "lucide-react";
+import { Check, ChevronRight, Link2, ListTodo, MoreHorizontal, Pin, PinOff, Trash2, UserMinus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@multica/ui/lib/utils";
 import { toast } from "sonner";
 import type { Issue, IssueStatus, ProjectStatus, ProjectPriority } from "@multica/core/types";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import { useUpdateProject, useDeleteProject } from "@multica/core/projects/mutations";
+import { pinListOptions } from "@multica/core/pins";
+import { useCreatePin, useDeletePin } from "@multica/core/pins";
 import { issueListOptions } from "@multica/core/issues/queries";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { memberListOptions, agentListOptions } from "@multica/core/workspace/queries";
@@ -184,6 +186,10 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const { getActorName } = useActorName();
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
+  const { data: pinnedItems = [] } = useQuery(pinListOptions(wsId));
+  const isPinned = pinnedItems.some((p) => p.item_type === "project" && p.item_id === projectId);
+  const createPin = useCreatePin();
+  const deletePinMut = useDeletePin();
   const descEditorRef = useRef<ContentEditorRef>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -256,6 +262,16 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               }
             />
             <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => {
+                if (isPinned) {
+                  deletePinMut.mutate({ itemType: "project", itemId: projectId });
+                } else {
+                  createPin.mutate({ item_type: "project", item_id: projectId });
+                }
+              }}>
+                {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => {
                 navigator.clipboard.writeText(window.location.href);
                 toast.success("Link copied");

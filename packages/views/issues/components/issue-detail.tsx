@@ -12,6 +12,8 @@ import {
   Link2,
   MoreHorizontal,
   PanelRight,
+  Pin,
+  PinOff,
   Plus,
   Trash2,
   UserMinus,
@@ -77,6 +79,8 @@ import { api } from "@multica/core/api";
 import { useModalStore } from "@multica/core/modals";
 import { timeAgo } from "@multica/core/utils";
 import { cn } from "@multica/ui/lib/utils";
+import { pinListOptions } from "@multica/core/pins";
+import { useCreatePin, useDeletePin } from "@multica/core/pins";
 
 import { ProgressRing } from "./progress-ring";
 
@@ -244,6 +248,12 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
 
   // Token usage
   const { data: usage } = useQuery(issueUsageOptions(id));
+
+  // Pinned state
+  const { data: pinnedItems = [] } = useQuery(pinListOptions(wsId));
+  const isPinned = pinnedItems.some((p) => p.item_type === "issue" && p.item_id === id);
+  const createPin = useCreatePin();
+  const deletePin = useDeletePin();
 
   // Sub-issue queries
   const parentIssueId = issue?.parent_issue_id;
@@ -594,6 +604,18 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
                 }}>
                   <Plus className="h-3.5 w-3.5" />
                   Create sub-issue
+                </DropdownMenuItem>
+
+                {/* Pin / Unpin */}
+                <DropdownMenuItem onClick={() => {
+                  if (isPinned) {
+                    deletePin.mutate({ itemType: "issue", itemId: issue.id });
+                  } else {
+                    createPin.mutate({ item_type: "issue", item_id: issue.id });
+                  }
+                }}>
+                  {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                  {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
                 </DropdownMenuItem>
 
                 {/* Copy link */}

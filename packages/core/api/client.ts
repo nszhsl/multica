@@ -44,6 +44,10 @@ import type {
   CreateProjectRequest,
   UpdateProjectRequest,
   ListProjectsResponse,
+  PinnedItem,
+  CreatePinRequest,
+  PinnedItemType,
+  ReorderPinsRequest,
 } from "../types";
 import { type Logger, noopLogger } from "../logger";
 
@@ -687,5 +691,28 @@ export class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.fetch(`/api/projects/${id}`, { method: "DELETE" });
+  }
+
+  // Pins
+  async listPins(): Promise<PinnedItem[]> {
+    return this.fetch("/api/pins");
+  }
+
+  async createPin(data: CreatePinRequest): Promise<PinnedItem> {
+    return this.fetch("/api/pins", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePin(itemType: PinnedItemType, itemId: string): Promise<void> {
+    await this.fetch(`/api/pins/${itemType}/${itemId}`, { method: "DELETE" });
+  }
+
+  async reorderPins(data: ReorderPinsRequest): Promise<void> {
+    await this.fetch("/api/pins/reorder", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
   }
 }

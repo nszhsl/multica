@@ -18,6 +18,7 @@ import {
   CircleUser,
   FolderKanban,
   Ellipsis,
+  PinOff,
 } from "lucide-react";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
@@ -52,6 +53,9 @@ import { inboxKeys, deduplicateInboxItems } from "@multica/core/inbox/queries";
 import { api } from "@multica/core/api";
 import { useModalStore } from "@multica/core/modals";
 import { useMyRuntimesNeedUpdate } from "@multica/core/runtimes/hooks";
+import { pinKeys } from "@multica/core/pins/queries";
+import { useDeletePin } from "@multica/core/pins/mutations";
+import type { PinnedItem } from "@multica/core/types";
 
 const personalNav = [
   { href: "/inbox", label: "Inbox", icon: Inbox },
@@ -106,6 +110,12 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
     [inboxItems],
   );
   const hasRuntimeUpdates = useMyRuntimesNeedUpdate(wsId);
+  const { data: pinnedItems = [] } = useQuery<PinnedItem[]>({
+    queryKey: wsId ? pinKeys.list(wsId) : ["pins", "disabled"],
+    queryFn: () => api.listPins(),
+    enabled: !!wsId,
+  });
+  const deletePin = useDeletePin();
 
   const queryClient = useQueryClient();
   const logout = () => {
@@ -262,6 +272,51 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          {pinnedItems.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Pinned</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-0.5">
+                  {pinnedItems.map((pin: PinnedItem) => {
+                    const href = pin.item_type === "issue"
+                      ? `/issues/${pin.item_id}`
+                      : `/projects/${pin.item_id}`;
+                    const isActive = pathname === href;
+                    const label = pin.item_type === "issue" && pin.identifier
+                      ? `${pin.identifier} ${pin.title}`
+                      : pin.title;
+                    return (
+                      <SidebarMenuItem key={pin.id} className="group/pin">
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          render={<AppLink href={href} />}
+                          className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
+                        >
+                          {pin.item_type === "issue" ? (
+                            <ListTodo className="size-4 shrink-0" />
+                          ) : (
+                            <FolderKanban className="size-4 shrink-0" />
+                          )}
+                          <span className="truncate">{label}</span>
+                          <button
+                            className="ml-auto opacity-0 group-hover/pin:opacity-100 transition-opacity p-0.5 rounded hover:bg-accent shrink-0"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deletePin.mutate({ itemType: pin.item_type, itemId: pin.item_id });
+                            }}
+                          >
+                            <PinOff className="size-3 text-muted-foreground" />
+                          </button>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
 
           <SidebarGroup>
             <SidebarGroupLabel>Workspace</SidebarGroupLabel>

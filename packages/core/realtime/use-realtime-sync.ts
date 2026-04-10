@@ -11,6 +11,7 @@ import { clearWorkspaceStorage } from "../platform/storage-cleanup";
 import { defaultStorage } from "../platform/storage";
 import { issueKeys } from "../issues/queries";
 import { projectKeys } from "../projects/queries";
+import { pinKeys } from "../pins/queries";
 import { runtimeKeys } from "../runtimes/queries";
 import {
   onIssueCreated,
@@ -98,6 +99,10 @@ export function useRealtimeSync(
       project: () => {
         const wsId = workspaceStore.getState().workspace?.id;
         if (wsId) qc.invalidateQueries({ queryKey: projectKeys.all(wsId) });
+      },
+      pin: () => {
+        const wsId = workspaceStore.getState().workspace?.id;
+        if (wsId) qc.invalidateQueries({ queryKey: pinKeys.all(wsId) });
       },
       daemon: () => {
         const wsId = workspaceStore.getState().workspace?.id;
