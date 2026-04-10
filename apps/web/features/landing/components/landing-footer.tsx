@@ -83,14 +83,28 @@ export function LandingFooter() {
           </div>
         </div>
 
-        {/* Bottom: copyright + language switcher */}
+        {/* Bottom: copyright + badge + language switcher */}
         <div className="flex items-center justify-between py-6">
-          <p className="text-[13px] text-white/36">
-            {t.footer.copyright.replace(
-              "{year}",
-              String(new Date().getFullYear()),
-            )}
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-[13px] text-white/36">
+              {t.footer.copyright.replace(
+                "{year}",
+                String(new Date().getFullYear()),
+              )}
+            </p>
+            <Link
+              href="https://trendshift.io/repositories/24695"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://trendshift.io/api/badge/repositories/24695"
+                alt="multica-ai/multica | Trendshift"
+                className="h-[28px] w-auto"
+              />
+            </Link>
+          </div>
           <div className="flex items-center">
             {locales.map((l, i) => (
               <button
