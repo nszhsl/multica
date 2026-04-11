@@ -277,7 +277,7 @@ func (s *TaskService) CompleteTask(ctx context.Context, taskID pgtype.UUID, resu
 		agentCommented, _ := s.Queries.HasAgentCommentedSince(ctx, db.HasAgentCommentedSinceParams{
 			IssueID:  task.IssueID,
 			AuthorID: task.AgentID,
-			Since:    task.CreatedAt,
+			Since:    task.StartedAt,
 		})
 		if !agentCommented {
 			var payload protocol.TaskCompletedPayload
