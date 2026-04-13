@@ -748,12 +748,26 @@ func TestInvalidRequestBodies(t *testing.T) {
 
 func TestWebSocketIntegration(t *testing.T) {
 	// Connect WebSocket client
-	wsURL := "ws" + strings.TrimPrefix(testServer.URL, "http") + "/ws?token=" + testToken + "&workspace_id=" + testWorkspaceID
+	wsURL := "ws" + strings.TrimPrefix(testServer.URL, "http") + "/ws?workspace_id=" + testWorkspaceID
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("WebSocket connection failed: %v", err)
 	}
 	defer conn.Close()
+
+	// Authenticate via initial message
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"auth","token":"`+testToken+`"}`)); err != nil {
+		t.Fatalf("failed to send auth message: %v", err)
+	}
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, authResp, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read auth response: %v", err)
+	}
+	if string(authResp) != `{"type":"auth_ok"}` {
+		t.Fatalf("expected auth_ok, got: %s", authResp)
+	}
+	conn.SetReadDeadline(time.Time{})
 
 	// Allow Hub goroutine to process the register and add client to room
 	time.Sleep(100 * time.Millisecond)

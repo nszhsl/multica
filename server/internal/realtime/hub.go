@@ -2,10 +2,12 @@ package realtime
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
@@ -220,60 +222,21 @@ func (h *Hub) Broadcast(message []byte) {
 	h.broadcast <- message
 }
 
-// HandleWebSocket upgrades an HTTP connection to WebSocket with JWT or PAT auth.
+const authTimeout = 5 * time.Second
+
+type authMessage struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+// HandleWebSocket upgrades an HTTP connection to WebSocket.
+// Authentication is performed via the first message after connection establishment,
+// keeping the token out of URL query parameters (and thus out of server logs,
+// proxy logs, and browser history).
 func HandleWebSocket(hub *Hub, mc MembershipChecker, pr PATResolver, w http.ResponseWriter, r *http.Request) {
-	tokenStr := r.URL.Query().Get("token")
 	workspaceID := r.URL.Query().Get("workspace_id")
-
-	if tokenStr == "" || workspaceID == "" {
-		http.Error(w, `{"error":"token and workspace_id required"}`, http.StatusUnauthorized)
-		return
-	}
-
-	var userID string
-
-	if strings.HasPrefix(tokenStr, "mul_") {
-		// PAT authentication
-		if pr == nil {
-			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
-			return
-		}
-		uid, ok := pr.ResolveToken(r.Context(), tokenStr)
-		if !ok {
-			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
-			return
-		}
-		userID = uid
-	} else {
-		// JWT authentication
-		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return auth.JWTSecret(), nil
-		})
-		if err != nil || !token.Valid {
-			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			http.Error(w, `{"error":"invalid claims"}`, http.StatusUnauthorized)
-			return
-		}
-
-		uid, ok := claims["sub"].(string)
-		if !ok || strings.TrimSpace(uid) == "" {
-			http.Error(w, `{"error":"invalid claims"}`, http.StatusUnauthorized)
-			return
-		}
-		userID = uid
-	}
-
-	// Verify user is a member of the workspace
-	if !mc.IsMember(r.Context(), userID, workspaceID) {
-		http.Error(w, `{"error":"not a member of this workspace"}`, http.StatusForbidden)
+	if workspaceID == "" {
+		http.Error(w, `{"error":"workspace_id required"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -282,6 +245,75 @@ func HandleWebSocket(hub *Hub, mc MembershipChecker, pr PATResolver, w http.Resp
 		slog.Error("websocket upgrade failed", "error", err)
 		return
 	}
+
+	sendErr := func(msg string) {
+		errResp, _ := json.Marshal(map[string]string{"type": "auth_error", "error": msg})
+		conn.WriteMessage(websocket.TextMessage, errResp)
+		conn.Close()
+	}
+
+	conn.SetReadDeadline(time.Now().Add(authTimeout))
+
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		slog.Debug("ws auth read failed", "error", err)
+		conn.Close()
+		return
+	}
+
+	var msg authMessage
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" || msg.Token == "" {
+		sendErr("invalid auth message")
+		return
+	}
+
+	tokenStr := msg.Token
+	var userID string
+
+	if strings.HasPrefix(tokenStr, "mul_") {
+		if pr == nil {
+			sendErr("invalid token")
+			return
+		}
+		uid, ok := pr.ResolveToken(r.Context(), tokenStr)
+		if !ok {
+			sendErr("invalid token")
+			return
+		}
+		userID = uid
+	} else {
+		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, jwt.ErrSignatureInvalid
+			}
+			return auth.JWTSecret(), nil
+		})
+		if err != nil || !token.Valid {
+			sendErr("invalid token")
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			sendErr("invalid claims")
+			return
+		}
+
+		uid, ok := claims["sub"].(string)
+		if !ok || strings.TrimSpace(uid) == "" {
+			sendErr("invalid claims")
+			return
+		}
+		userID = uid
+	}
+
+	if !mc.IsMember(r.Context(), userID, workspaceID) {
+		sendErr("not a member of this workspace")
+		return
+	}
+
+	conn.SetReadDeadline(time.Time{})
+	conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"auth_ok"}`))
 
 	client := &Client{
 		hub:         hub,

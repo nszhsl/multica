@@ -27,28 +27,41 @@ export class WSClient {
 
   connect() {
     const url = new URL(this.baseUrl);
-    if (this.token) url.searchParams.set("token", this.token);
     if (this.workspaceId)
       url.searchParams.set("workspace_id", this.workspaceId);
 
     this.ws = new WebSocket(url.toString());
 
     this.ws.onopen = () => {
-      this.logger.info("connected");
-      if (this.hasConnectedBefore) {
-        for (const cb of this.onReconnectCallbacks) {
-          try {
-            cb();
-          } catch {
-            // ignore reconnect callback errors
-          }
-        }
+      if (this.token) {
+        this.ws!.send(JSON.stringify({ type: "auth", token: this.token }));
       }
-      this.hasConnectedBefore = true;
     };
 
     this.ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data as string) as WSMessage;
+      const data = JSON.parse(event.data as string);
+
+      if (data.type === "auth_ok") {
+        this.logger.info("connected");
+        if (this.hasConnectedBefore) {
+          for (const cb of this.onReconnectCallbacks) {
+            try {
+              cb();
+            } catch {
+              // ignore reconnect callback errors
+            }
+          }
+        }
+        this.hasConnectedBefore = true;
+        return;
+      }
+
+      if (data.type === "auth_error") {
+        this.logger.error("ws auth failed:", data.error);
+        return;
+      }
+
+      const msg = data as WSMessage;
       this.logger.debug("received", msg.type);
       const eventHandlers = this.handlers.get(msg.type);
       if (eventHandlers) {
