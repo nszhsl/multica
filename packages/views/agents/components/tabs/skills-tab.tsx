@@ -65,7 +65,7 @@ export function SkillsTab({
         <div>
           <h3 className="text-sm font-semibold">Skills</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Reusable skills assigned to this agent. Manage skills on the Skills page.
+            Workspace skills assigned to this agent. Local runtime skills are always available automatically.
           </p>
         </div>
         <Button
@@ -84,7 +84,7 @@ export function SkillsTab({
           <FileText className="h-8 w-8 text-muted-foreground/40" />
           <p className="mt-3 text-sm text-muted-foreground">No skills assigned</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Add skills from the workspace to this agent.
+            Add workspace skills to share team knowledge with this agent. Local skills are already used automatically.
           </p>
           {availableSkills.length > 0 && (
             <Button
