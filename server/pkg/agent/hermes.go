@@ -180,10 +180,14 @@ func (b *hermesBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 			sessionID = opts.ResumeSessionID
 			_ = result
 		} else {
-			result, err := c.request(runCtx, "session/new", map[string]any{
+			sessionParams := map[string]any{
 				"cwd":        cwd,
 				"mcpServers": []any{},
-			})
+			}
+			if opts.Model != "" {
+				sessionParams["model"] = opts.Model
+			}
+			result, err := c.request(runCtx, "session/new", sessionParams)
 			if err != nil {
 				finalStatus = "failed"
 				finalError = fmt.Sprintf("hermes session/new failed: %v", err)
