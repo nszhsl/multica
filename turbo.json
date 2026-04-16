@@ -10,7 +10,8 @@
     "MULTICA_SERVER_URL",
     "COMPOSE_PROJECT_NAME",
     "POSTGRES_DB",
-    "POSTGRES_PORT"
+    "POSTGRES_PORT",
+    "DESKTOP_RENDERER_PORT"
   ],
   "tasks": {
     "build": {
