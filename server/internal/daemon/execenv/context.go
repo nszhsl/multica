@@ -13,6 +13,7 @@ import (
 //
 // Claude:   skills → {workDir}/.claude/skills/{name}/SKILL.md  (native discovery)
 // Codex:    skills → handled separately in Prepare via codex-home
+// Copilot:  skills → {workDir}/.agent_context/skills/{name}/SKILL.md  (via AGENTS.md references)
 // OpenCode: skills → {workDir}/.config/opencode/skills/{name}/SKILL.md  (native discovery)
 // Pi:       skills → {workDir}/.pi/agent/skills/{name}/SKILL.md  (native discovery)
 // Cursor:   skills → {workDir}/.cursor/skills/{name}/SKILL.md  (native discovery)

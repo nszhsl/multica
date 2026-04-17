@@ -16,7 +16,7 @@ import { paths } from "@multica/core/paths";
  * login* — before the user has ever visited a workspace — the cookie is
  * absent, so the proxy falls through to the landing page. This component
  * covers that gap: once auth is resolved and the workspace list has loaded,
- * push the user into their workspace (or onboarding if they have none).
+ * push the user into their workspace (or /workspaces/new if they have none).
  *
  * Renders nothing. Uses `router.replace` so the landing page never enters
  * browser history for authenticated users.
@@ -35,7 +35,7 @@ export function RedirectIfAuthenticated() {
     if (isLoading || !user || !list) return;
     const [first] = list;
     if (!first) {
-      router.replace(paths.onboarding());
+      router.replace(paths.newWorkspace());
       return;
     }
     router.replace(paths.workspace(first.slug).issues());

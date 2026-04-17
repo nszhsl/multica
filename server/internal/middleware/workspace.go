@@ -44,6 +44,45 @@ func SetMemberContext(ctx context.Context, workspaceID string, member db.Member)
 // (400) from "identifier provided but invalid" (404).
 var errWorkspaceNotFound = errors.New("workspace not found")
 
+// ResolveWorkspaceIDFromRequest returns the workspace UUID for an HTTP
+// request using the same priority order as the workspace middleware. This is
+// the single source of truth for "which workspace is this request targeting?",
+// shared by middleware-protected routes (via context fast path) and
+// middleware-less routes (e.g. /api/upload-file) that must resolve the slug
+// themselves.
+//
+// Priority:
+//  1. middleware-injected context (fast path for middleware-protected routes)
+//  2. X-Workspace-Slug header → GetWorkspaceBySlug → UUID (post-refactor frontend)
+//  3. ?workspace_slug query → GetWorkspaceBySlug → UUID
+//  4. X-Workspace-ID header (CLI/daemon compat)
+//  5. ?workspace_id query (CLI/daemon compat)
+//
+// Returns "" when no identifier was provided OR a slug was provided but
+// doesn't resolve to any workspace. Callers that need to distinguish "no
+// identifier" (400) from "invalid slug" (404) should use the middleware's
+// internal resolver instead — this helper collapses both cases to "" for
+// simpler handler-level checks.
+func ResolveWorkspaceIDFromRequest(r *http.Request, queries *db.Queries) string {
+	if id := WorkspaceIDFromContext(r.Context()); id != "" {
+		return id
+	}
+	if slug := r.Header.Get("X-Workspace-Slug"); slug != "" {
+		if ws, err := queries.GetWorkspaceBySlug(r.Context(), slug); err == nil {
+			return util.UUIDToString(ws.ID)
+		}
+	}
+	if slug := r.URL.Query().Get("workspace_slug"); slug != "" {
+		if ws, err := queries.GetWorkspaceBySlug(r.Context(), slug); err == nil {
+			return util.UUIDToString(ws.ID)
+		}
+	}
+	if id := r.Header.Get("X-Workspace-ID"); id != "" {
+		return id
+	}
+	return r.URL.Query().Get("workspace_id")
+}
+
 // workspaceResolver extracts a workspace UUID from the request.
 // Returns ("", nil) if no workspace identifier was provided at all.
 // Returns ("", errWorkspaceNotFound) if a slug was provided but doesn't exist.

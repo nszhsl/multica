@@ -75,8 +75,8 @@ import { useModalStore } from "@multica/core/modals";
 import { useMyRuntimesNeedUpdate } from "@multica/core/runtimes/hooks";
 import { pinListOptions } from "@multica/core/pins/queries";
 import { useDeletePin, useReorderPins } from "@multica/core/pins/mutations";
-import type { PinnedItem, Workspace } from "@multica/core/types";
-import { clearWorkspaceStorage, defaultStorage } from "@multica/core/platform";
+import type { PinnedItem } from "@multica/core/types";
+import { useLogout } from "../auth";
 
 // Nav items reference WorkspacePaths method names so they can be resolved
 // against the current workspace slug at render time (see AppSidebar body).
@@ -196,7 +196,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   const { pathname, push } = useNavigation();
   const user = useAuthStore((s) => s.user);
   const userId = useAuthStore((s) => s.user?.id);
-  const authLogout = useAuthStore((s) => s.logout);
+  const logout = useLogout();
   const workspace = useCurrentWorkspace();
   const p = useWorkspacePaths();
   const { data: workspaces = [] } = useQuery(workspaceListOptions());
@@ -262,28 +262,6 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
       queryClient.invalidateQueries({ queryKey: workspaceKeys.myInvitations() });
     },
   });
-  const logout = () => {
-    // Clear workspace-scoped storage for every workspace this user has access to,
-    // before clearing the React Query cache (which holds the workspace list).
-    // Otherwise per-workspace drafts/chat/etc would leak to the next user on this device.
-    const cachedWorkspaces =
-      queryClient.getQueryData<Workspace[]>(workspaceKeys.list()) ?? [];
-    for (const ws of cachedWorkspaces) {
-      clearWorkspaceStorage(defaultStorage, ws.slug);
-    }
-    // Clear the last-workspace-slug cookie. Otherwise on a shared device the
-    // next user gets redirected by the proxy to the previous user's last
-    // workspace (then bounced to /onboarding by the layout — flash + confusing).
-    if (typeof document !== "undefined") {
-      document.cookie = "last_workspace_slug=; path=/; max-age=0; SameSite=Lax";
-    }
-    // Clear desktop tab state. Tab paths can contain issue UUIDs which must
-    // not survive across user sessions on a shared machine. No-op on web
-    // (web doesn't write this key).
-    defaultStorage.removeItem("multica_tabs");
-    queryClient.clear();
-    authLogout();
-  };
 
   // Global "C" shortcut to open create-issue modal (like Linear)
   useEffect(() => {

@@ -199,7 +199,8 @@ export function LoginPage({
 
         // Normal path: seed the workspace list into the Query cache so the
         // caller's onSuccess can read it synchronously to compute a destination
-        // URL (first workspace's slug, or onboarding).
+        // URL (first workspace's slug, or /workspaces/new for zero-workspace
+        // users).
         await useAuthStore.getState().verifyCode(email, value);
         const wsList = await api.listWorkspaces();
         qc.setQueryData(workspaceKeys.list(), wsList);

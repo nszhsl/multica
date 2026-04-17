@@ -14,30 +14,50 @@ let _pendingNotify = false;
 let _pendingRehydrate = false;
 
 /**
- * Set both the current workspace slug and UUID at once.
- * Called by the workspace layout's render-phase ref guard.
- * Notifies slug subscribers (e.g. WSProvider via useSyncExternalStore).
+ * Update the current workspace identity. This is the single source of truth
+ * for "which workspace is active"; everything downstream (WS connection,
+ * persist namespace, cache-key derivation) follows from here.
+ *
+ * If the slug actually changed, two side effects fire:
+ *   1. Subscribers are notified (e.g. WSProvider reconnects).
+ *   2. All registered persist stores rehydrate from the new slug's namespace.
+ *
+ * Both side effects are idempotent on slug-equality: repeat calls with the
+ * same slug are a pure no-op. This matters on desktop, where N tabs each
+ * mount their own WorkspaceRouteLayout and each one naively tries to sync;
+ * only the first call for a given slug does real work.
+ *
+ * Both side effects are deferred to a microtask because zustand persist
+ * rehydrate + subscriber notifications both end up calling setState(), and
+ * React 19 forbids "cross-component updates during render".
  */
 export function setCurrentWorkspace(slug: string | null, wsId: string | null) {
-  const slugChanged = _currentSlug !== slug;
+  if (_currentSlug === slug) {
+    // Slug unchanged: nothing to rehydrate, nothing to notify. Accept a
+    // (possibly) updated wsId for consumers that read the UUID mirror.
+    _currentWsId = wsId;
+    return;
+  }
   _currentSlug = slug;
   _currentWsId = wsId;
-  if (slugChanged && !_pendingNotify) {
+
+  if (!_pendingNotify) {
     _pendingNotify = true;
-    // Defer and deduplicate subscriber notifications:
-    // 1. Defer: avoids "cannot update component B while rendering A"
-    //    (React 19 render-phase restriction).
-    // 2. Deduplicate: rapid A→B switches only notify once with the
-    //    final slug, avoiding a wasted WS connect+disconnect cycle.
-    // The module vars are already updated synchronously above, so
-    // authHeaders() and getCurrentSlug() return the correct value
-    // immediately — subscribers are only for async consumers like
-    // WSProvider that need to reconnect the WebSocket.
     queueMicrotask(() => {
       _pendingNotify = false;
       const current = _currentSlug;
       for (const fn of _slugSubscribers) {
         fn(current);
+      }
+    });
+  }
+
+  if (!_pendingRehydrate) {
+    _pendingRehydrate = true;
+    queueMicrotask(() => {
+      _pendingRehydrate = false;
+      for (const fn of _rehydrateFns) {
+        fn();
       }
     });
   }
@@ -69,27 +89,6 @@ export function subscribeToCurrentSlug(
 /** Register a persist store's rehydrate function to be called on workspace switch. */
 export function registerForWorkspaceRehydration(fn: () => void) {
   _rehydrateFns.push(fn);
-}
-
-/**
- * Rehydrate all registered workspace-scoped persist stores from the new
- * namespace. Deferred to a microtask + deduplicated for the same reason
- * as slug subscriber notification: Zustand persist rehydrate synchronously
- * setState()s the store, which schedules updates on any component
- * subscribed to that store. Calling this from a component's render phase
- * would violate React 19's "no cross-component updates during render"
- * rule. Persist stores can tolerate one microtask of staleness — they're
- * UI preferences, not security-critical state.
- */
-export function rehydrateAllWorkspaceStores() {
-  if (_pendingRehydrate) return;
-  _pendingRehydrate = true;
-  queueMicrotask(() => {
-    _pendingRehydrate = false;
-    for (const fn of _rehydrateFns) {
-      fn();
-    }
-  });
 }
 
 /**

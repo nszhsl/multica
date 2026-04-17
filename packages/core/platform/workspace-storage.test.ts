@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createWorkspaceAwareStorage, setCurrentWorkspace } from "./workspace-storage";
+import {
+  createWorkspaceAwareStorage,
+  setCurrentWorkspace,
+  registerForWorkspaceRehydration,
+} from "./workspace-storage";
 import type { StorageAdapter } from "../types/storage";
 
 function mockAdapter(): StorageAdapter {
@@ -57,5 +61,59 @@ describe("workspace-aware storage", () => {
 
     storage.removeItem("draft");
     expect(adapter.removeItem).toHaveBeenCalledWith("draft:dev");
+  });
+});
+
+describe("setCurrentWorkspace — rehydrate side effect", () => {
+  const flush = () => new Promise((resolve) => queueMicrotask(() => resolve(null)));
+
+  it("runs registered fns once when slug changes", async () => {
+    const fn = vi.fn();
+    registerForWorkspaceRehydration(fn);
+
+    setCurrentWorkspace("team-a", "ws_a");
+    await flush();
+
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a no-op when slug is unchanged — repeat calls with same slug skip the side effect", async () => {
+    const fn = vi.fn();
+    registerForWorkspaceRehydration(fn);
+
+    setCurrentWorkspace("team-a", "ws_a");
+    await flush();
+    setCurrentWorkspace("team-a", "ws_a");
+    setCurrentWorkspace("team-a", "ws_a");
+    setCurrentWorkspace("team-a", "ws_a");
+    await flush();
+
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs again on real workspace switch", async () => {
+    const fn = vi.fn();
+    registerForWorkspaceRehydration(fn);
+
+    setCurrentWorkspace("team-a", "ws_a");
+    await flush();
+    setCurrentWorkspace("team-b", "ws_b");
+    await flush();
+
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs again after logout → re-entry into same workspace", async () => {
+    const fn = vi.fn();
+    registerForWorkspaceRehydration(fn);
+
+    setCurrentWorkspace("team-a", "ws_a");
+    await flush();
+    setCurrentWorkspace(null, null);
+    await flush();
+    setCurrentWorkspace("team-a", "ws_a");
+    await flush();
+
+    expect(fn).toHaveBeenCalledTimes(3);
   });
 });

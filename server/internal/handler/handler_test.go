@@ -23,6 +23,7 @@ var testHandler *Handler
 var testPool *pgxpool.Pool
 var testUserID string
 var testWorkspaceID string
+var testRuntimeID string
 
 const (
 	handlerTestEmail         = "handler-test@multica.ai"
@@ -114,6 +115,7 @@ func setupHandlerTestFixture(ctx context.Context, pool *pgxpool.Pool) (string, s
 	`, workspaceID, "Handler Test Runtime", "handler_test_runtime", "Handler test runtime").Scan(&runtimeID); err != nil {
 		return "", "", err
 	}
+	testRuntimeID = runtimeID
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO agent (
@@ -854,7 +856,7 @@ func TestVerifyCodeNewUserHasNoWorkspace(t *testing.T) {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
 
-	// New users should have no workspaces (onboarding creates one)
+	// New users should have no workspaces (/workspaces/new creates one)
 	workspaces, err := testHandler.Queries.ListWorkspaces(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListWorkspaces: %v", err)

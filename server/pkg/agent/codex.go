@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -150,38 +151,22 @@ func (b *codexBackend) Execute(ctx context.Context, prompt string, opts ExecOpti
 		}
 		c.notify("initialized")
 
-		// 2. Start thread
-		threadResult, err := c.request(runCtx, "thread/start", map[string]any{
-			"model":                    nilIfEmpty(opts.Model),
-			"modelProvider":            nil,
-			"profile":                  nil,
-			"cwd":                      opts.Cwd,
-			"approvalPolicy":           nil,
-			"sandbox":                  nil,
-			"config":                   nil,
-			"baseInstructions":         nil,
-			"developerInstructions":    nilIfEmpty(opts.SystemPrompt),
-			"compactPrompt":            nil,
-			"includeApplyPatchTool":    nil,
-			"experimentalRawEvents":    false,
-			"persistExtendedHistory":   true,
-		})
+		// 2. Start a new thread, or resume the prior one for this issue. When
+		// resume fails (thread GCed on the server, schema drift, etc.) we fall
+		// back to a fresh thread so the task still makes progress.
+		threadID, resumed, err := c.startOrResumeThread(runCtx, opts, b.cfg.Logger)
 		if err != nil {
 			finalStatus = "failed"
-			finalError = fmt.Sprintf("codex thread/start failed: %v", err)
-			resCh <- Result{Status: finalStatus, Error: finalError, DurationMs: time.Since(startTime).Milliseconds()}
-			return
-		}
-
-		threadID := extractThreadID(threadResult)
-		if threadID == "" {
-			finalStatus = "failed"
-			finalError = "codex thread/start returned no thread ID"
+			finalError = err.Error()
 			resCh <- Result{Status: finalStatus, Error: finalError, DurationMs: time.Since(startTime).Milliseconds()}
 			return
 		}
 		c.threadID = threadID
-		b.cfg.Logger.Info("codex thread started", "thread_id", threadID)
+		if resumed {
+			b.cfg.Logger.Info("codex thread resumed", "thread_id", threadID)
+		} else {
+			b.cfg.Logger.Info("codex thread started", "thread_id", threadID)
+		}
 
 		// 3. Send turn and wait for completion
 		_, err = c.request(runCtx, "turn/start", map[string]any{
@@ -266,12 +251,65 @@ func (b *codexBackend) Execute(ctx context.Context, prompt string, opts ExecOpti
 			Status:     finalStatus,
 			Output:     finalOutput,
 			Error:      finalError,
+			SessionID:  threadID,
 			DurationMs: duration.Milliseconds(),
 			Usage:      usageMap,
 		}
 	}()
 
 	return &Session{Messages: msgCh, Result: resCh}, nil
+}
+
+// startOrResumeThread picks between Codex's thread/resume and thread/start
+// based on opts.ResumeSessionID. When a prior thread ID is provided it first
+// tries thread/resume; any error (unknown thread, schema mismatch, transport
+// failure) is logged and the method falls back to thread/start so the task
+// still executes. The returned threadID is what subsequent turn/start calls
+// must reference, and resumed indicates whether the prior thread was picked
+// up (only useful for logging).
+func (c *codexClient) startOrResumeThread(ctx context.Context, opts ExecOptions, logger *slog.Logger) (string, bool, error) {
+	if priorThreadID := opts.ResumeSessionID; priorThreadID != "" {
+		// thread/resume reuses the thread's persisted model and reasoning
+		// effort; only override fields the daemon actually cares about.
+		resumeResult, err := c.request(ctx, "thread/resume", map[string]any{
+			"threadId":              priorThreadID,
+			"cwd":                   opts.Cwd,
+			"model":                 nilIfEmpty(opts.Model),
+			"developerInstructions": nilIfEmpty(opts.SystemPrompt),
+		})
+		if err == nil {
+			if threadID := extractThreadID(resumeResult); threadID != "" {
+				return threadID, true, nil
+			}
+			logger.Warn("codex thread/resume returned no thread ID; falling back to thread/start", "prior_thread_id", priorThreadID)
+		} else {
+			logger.Warn("codex thread/resume failed; falling back to thread/start", "prior_thread_id", priorThreadID, "error", err)
+		}
+	}
+
+	startResult, err := c.request(ctx, "thread/start", map[string]any{
+		"model":                  nilIfEmpty(opts.Model),
+		"modelProvider":          nil,
+		"profile":                nil,
+		"cwd":                    opts.Cwd,
+		"approvalPolicy":         nil,
+		"sandbox":                nil,
+		"config":                 nil,
+		"baseInstructions":       nil,
+		"developerInstructions":  nilIfEmpty(opts.SystemPrompt),
+		"compactPrompt":          nil,
+		"includeApplyPatchTool":  nil,
+		"experimentalRawEvents":  false,
+		"persistExtendedHistory": true,
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("codex thread/start failed: %w", err)
+	}
+	threadID := extractThreadID(startResult)
+	if threadID == "" {
+		return "", false, fmt.Errorf("codex thread/start returned no thread ID")
+	}
+	return threadID, false, nil
 }
 
 // ── codexClient: JSON-RPC 2.0 transport ──
@@ -577,6 +615,19 @@ func (c *codexClient) handleEvent(msg map[string]any) {
 }
 
 func (c *codexClient) handleRawNotification(method string, params map[string]any) {
+	// Ignore notifications from threads other than the one we are tracking.
+	// Codex multiplexes subagent threads (e.g. memory consolidation) on the
+	// same stdio pipe; only our thread should drive turn lifecycle and output.
+	//
+	// The v2 app-server-protocol schema guarantees a top-level threadId on
+	// every notification, so this dispatch-level guard transparently covers
+	// every handler below. If a future codex revision introduces notifications
+	// without threadId, they fall through (ok=false) — re-audit this guard
+	// when bumping codex.
+	if threadID, ok := params["threadId"].(string); ok && c.threadID != "" && threadID != c.threadID {
+		return
+	}
+
 	switch method {
 	case "turn/started":
 		c.turnStarted = true

@@ -137,7 +137,6 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus) chi.Route
 
 		r.Post("/runtimes/{runtimeId}/tasks/claim", h.ClaimTaskByRuntime)
 		r.Get("/runtimes/{runtimeId}/tasks/pending", h.ListPendingTasksByRuntime)
-		r.Post("/runtimes/{runtimeId}/usage", h.ReportRuntimeUsage)
 		r.Post("/runtimes/{runtimeId}/ping/{pingId}/result", h.ReportPingResult)
 		r.Post("/runtimes/{runtimeId}/update/{updateId}/result", h.ReportUpdateResult)
 

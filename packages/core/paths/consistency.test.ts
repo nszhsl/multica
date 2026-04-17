@@ -66,7 +66,7 @@ describe("global path / reserved slug consistency", () => {
     "/login",
     "/logout",
     "/signup",
-    "/onboarding",
+    "/workspaces/",
     "/invite/",
     "/auth/",
   ];

@@ -28,8 +28,9 @@ function LoginPageContent() {
   // the user's workspace list.
   const nextUrl = searchParams.get("next");
 
-  // Already authenticated — honor ?next= or fall back to first workspace /
-  // onboarding. Skip this entire path when the user arrived to authorize the CLI.
+  // Already authenticated — honor ?next= or fall back to first workspace
+  // (or /workspaces/new if the user has none). Skip this entire path when
+  // the user arrived to authorize the CLI.
   useEffect(() => {
     if (isLoading || !user || cliCallbackRaw) return;
     if (nextUrl) {
@@ -39,7 +40,7 @@ function LoginPageContent() {
     const list = qc.getQueryData<Workspace[]>(workspaceKeys.list()) ?? [];
     const [first] = list;
     router.replace(
-      first ? paths.workspace(first.slug).issues() : paths.onboarding(),
+      first ? paths.workspace(first.slug).issues() : paths.newWorkspace(),
     );
   }, [isLoading, user, router, nextUrl, cliCallbackRaw, qc]);
 
@@ -53,7 +54,7 @@ function LoginPageContent() {
     const list = qc.getQueryData<Workspace[]>(workspaceKeys.list()) ?? [];
     const [first] = list;
     router.push(
-      first ? paths.workspace(first.slug).issues() : paths.onboarding(),
+      first ? paths.workspace(first.slug).issues() : paths.newWorkspace(),
     );
   };
 

@@ -13,13 +13,12 @@ import { ModalRegistry } from "@multica/views/modals/registry";
 import { AppSidebar } from "@multica/views/layout";
 import { SearchCommand, SearchTrigger } from "@multica/views/search";
 import { ChatFab, ChatWindow } from "@multica/views/chat";
-import { StepWorkspace } from "@multica/views/onboarding";
 import { WorkspaceSlugProvider } from "@multica/core/paths";
 import { getCurrentSlug, subscribeToCurrentSlug } from "@multica/core/platform";
 import { DesktopNavigationProvider } from "@/platform/navigation";
-import { OnboardingGate } from "./onboarding-gate";
 import { TabBar } from "./tab-bar";
 import { TabContent } from "./tab-content";
+import { WindowOverlay } from "./window-overlay";
 
 function SidebarTopBar() {
   const { canGoBack, canGoForward, goBack, goForward } = useTabHistory();
@@ -109,39 +108,34 @@ export function DesktopShell() {
 
   return (
     <DesktopNavigationProvider>
-      <OnboardingGate
-        onboarding={(onComplete) => (
-          <div className="flex min-h-screen items-center justify-center overflow-auto bg-background px-6 py-12">
-            <StepWorkspace onNext={onComplete} />
-          </div>
-        )}
-      >
-        {/* WorkspaceSlugProvider accepts null — components that need slug
-            use useWorkspaceSlug() (nullable) or useRequiredWorkspaceSlug()
-            (throws). TabContent MUST always render so the tab router can
-            mount WorkspaceRouteLayout, which calls setCurrentWorkspace()
-            to populate the slug. The sidebar gates on slug being present
-            to avoid the useRequiredWorkspaceSlug throw. */}
-        <WorkspaceSlugProvider slug={slug}>
-          <div className="flex h-screen">
-            <SidebarProvider className="flex-1">
-              {slug && <AppSidebar topSlot={<SidebarTopBar />} searchSlot={<SearchTrigger />} />}
-              {/* Right side: header + content container */}
-              <div className="flex flex-1 min-w-0 flex-col">
-                <MainTopBar />
-                {/* Content area with inset styling — relative so ChatWindow/ChatFab are constrained here */}
-                <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden mr-2 mb-2 ml-0.5 rounded-xl shadow-sm bg-background">
-                  <TabContent />
-                  {slug && <ChatWindow />}
-                  {slug && <ChatFab />}
-                </div>
+      {/* WorkspaceSlugProvider accepts null — components that need slug
+          use useWorkspaceSlug() (nullable) or useRequiredWorkspaceSlug()
+          (throws). TabContent MUST always render so the tab router can
+          mount WorkspaceRouteLayout, which calls setCurrentWorkspace()
+          to populate the slug. The sidebar gates on slug being present
+          to avoid the useRequiredWorkspaceSlug throw. Zero-workspace
+          users see the window-level overlay (new-workspace flow)
+          triggered by IndexRedirect, not a route. */}
+      <WorkspaceSlugProvider slug={slug}>
+        <div className="flex h-screen">
+          <SidebarProvider className="flex-1">
+            {slug && <AppSidebar topSlot={<SidebarTopBar />} searchSlot={<SearchTrigger />} />}
+            {/* Right side: header + content container */}
+            <div className="flex flex-1 min-w-0 flex-col">
+              <MainTopBar />
+              {/* Content area with inset styling — relative so ChatWindow/ChatFab are constrained here */}
+              <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden mr-2 mb-2 ml-0.5 rounded-xl shadow-sm bg-background">
+                <TabContent />
+                {slug && <ChatWindow />}
+                {slug && <ChatFab />}
               </div>
-            </SidebarProvider>
-          </div>
-          {slug && <ModalRegistry />}
-          {slug && <SearchCommand />}
-        </WorkspaceSlugProvider>
-      </OnboardingGate>
+            </div>
+          </SidebarProvider>
+        </div>
+        {slug && <ModalRegistry />}
+        {slug && <SearchCommand />}
+        <WindowOverlay />
+      </WorkspaceSlugProvider>
     </DesktopNavigationProvider>
   );
 }

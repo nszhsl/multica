@@ -66,11 +66,11 @@ function CallbackContent() {
           // URL is now the source of truth for the current workspace — the
           // [workspaceSlug]/layout syncs stores + cookie once we navigate.
           // Honor ?next= first (e.g. came from /invite/{id}), otherwise land
-          // in the first workspace's issues, or /onboarding if the user has none.
+          // in the first workspace's issues, or /workspaces/new for zero-workspace users.
           const [first] = wsList;
           const defaultDest = first
             ? paths.workspace(first.slug).issues()
-            : paths.onboarding();
+            : paths.newWorkspace();
           router.push(nextUrl || defaultDest);
         })
         .catch((err) => {
