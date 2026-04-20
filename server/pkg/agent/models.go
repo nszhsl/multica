@@ -2,7 +2,9 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -343,11 +345,14 @@ func parsePiModels(output string) []Model {
 	return models
 }
 
-// discoverOpenclawAgents runs `openclaw agents list --json` and
-// treats each registered agent as a selectable "model" — because
-// OpenClaw binds models at agent registration time, the right UX is
-// for users to pick a pre-registered agent name (which determines
-// the underlying model).
+// discoverOpenclawAgents enumerates the pre-registered OpenClaw
+// agents (which is where model selection actually lives in the
+// OpenClaw world — each agent is bound to a model at `agents add`
+// time). It tries structured JSON output first, falling back to a
+// conservative text parser that rejects TUI decoration and section
+// headers. On any ambiguity we return an empty list and let the
+// creatable dropdown handle manual entry — a silently-wrong
+// enumeration would be worse than none.
 func discoverOpenclawAgents(ctx context.Context, executablePath string) ([]Model, error) {
 	if executablePath == "" {
 		executablePath = "openclaw"
@@ -357,6 +362,27 @@ func discoverOpenclawAgents(ctx context.Context, executablePath string) ([]Model
 	}
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
+	// Try JSON modes first. Different openclaw builds expose the
+	// flag under different names; trying a couple is cheap.
+	for _, jsonArgs := range [][]string{
+		{"agents", "list", "--json"},
+		{"agents", "list", "--output", "json"},
+		{"agents", "list", "-o", "json"},
+	} {
+		cmd := exec.CommandContext(runCtx, executablePath, jsonArgs...)
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		if models, ok := parseOpenclawAgentsJSON(out); ok {
+			return models, nil
+		}
+	}
+
+	// Text fallback. Be strict — the default output is a decorated
+	// banner with box-drawing and section headers, and picking up
+	// the wrong tokens produces nonsense entries like "Identity:".
 	cmd := exec.CommandContext(runCtx, executablePath, "agents", "list")
 	out, err := cmd.Output()
 	if err != nil {
@@ -365,10 +391,71 @@ func discoverOpenclawAgents(ctx context.Context, executablePath string) ([]Model
 	return parseOpenclawAgents(string(out)), nil
 }
 
-// parseOpenclawAgents extracts agent names from `openclaw agents list`
-// text output. Output format varies across versions; we take the
-// first whitespace-delimited token on each non-empty, non-header
-// line. Lines starting with common header markers are skipped.
+// openclawAgentEntry is the shape parseOpenclawAgentsJSON expects
+// from `openclaw agents list --json`. Both `name` and `id` are
+// accepted as the identifier (different openclaw versions ship
+// different field names); `model` is optional and only used to
+// enrich the dropdown label.
+type openclawAgentEntry struct {
+	Name  string `json:"name"`
+	ID    string `json:"id"`
+	Model string `json:"model"`
+}
+
+// parseOpenclawAgentsJSON accepts `openclaw agents list --json`-style
+// output. It handles two common shapes: a top-level array, or an
+// object with an `agents` key whose value is an array. Returns
+// ok=false if the input isn't valid JSON in either shape.
+func parseOpenclawAgentsJSON(raw []byte) ([]Model, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return nil, false
+	}
+
+	var flat []openclawAgentEntry
+	if err := json.Unmarshal(raw, &flat); err == nil {
+		return openclawEntriesToModels(flat), true
+	}
+
+	var wrapped struct {
+		Agents []openclawAgentEntry `json:"agents"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Agents != nil {
+		return openclawEntriesToModels(wrapped.Agents), true
+	}
+
+	return nil, false
+}
+
+func openclawEntriesToModels(entries []openclawAgentEntry) []Model {
+	models := make([]Model, 0, len(entries))
+	seen := map[string]bool{}
+	for _, e := range entries {
+		name := e.Name
+		if name == "" {
+			name = e.ID
+		}
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		label := name
+		if e.Model != "" {
+			label = name + " (" + e.Model + ")"
+		}
+		models = append(models, Model{ID: name, Label: label, Provider: "openclaw"})
+	}
+	return models
+}
+
+// parseOpenclawAgents extracts agent names from the text output of
+// `openclaw agents list`. The default CLI output is a decorated
+// banner — section headers ending in `:`, box-drawing characters,
+// and single-character icons — so we only accept lines that look
+// like a proper `<name> <model>` row: at least two whitespace-
+// separated tokens, both made of safe identifier characters, and
+// neither ending in `:`. Anything else is discarded to avoid
+// surfacing "Identity:" or `◇` as selectable models.
 func parseOpenclawAgents(output string) []Model {
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -379,23 +466,48 @@ func parseOpenclawAgents(output string) []Model {
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "=") {
-			continue
-		}
-		lower := strings.ToLower(line)
-		if strings.HasPrefix(lower, "name") || strings.HasPrefix(lower, "agent") && strings.Contains(lower, "model") {
-			continue
-		}
 		fields := strings.Fields(line)
-		if len(fields) == 0 {
+		if len(fields) < 2 {
 			continue
 		}
-		name := fields[0]
+		name, model := fields[0], fields[1]
+		if !isOpenclawIdentifier(name) || !isOpenclawIdentifier(model) {
+			continue
+		}
 		if seen[name] {
 			continue
 		}
 		seen[name] = true
-		models = append(models, Model{ID: name, Label: name, Provider: "openclaw"})
+		models = append(models, Model{
+			ID:       name,
+			Label:    name + " (" + model + ")",
+			Provider: "openclaw",
+		})
 	}
 	return models
+}
+
+// isOpenclawIdentifier reports whether s looks like a valid
+// agent-name or model-id token: starts with a letter, contains only
+// identifier-safe characters, and isn't a section header
+// (trailing colon). Rejects TUI decoration like `│`, `╭`, `◇`, `|`.
+func isOpenclawIdentifier(s string) bool {
+	if s == "" || strings.HasSuffix(s, ":") {
+		return false
+	}
+	first := s[0]
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_' || r == '.' || r == '/':
+		default:
+			return false
+		}
+	}
+	return true
 }

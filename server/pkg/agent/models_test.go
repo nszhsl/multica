@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -116,22 +117,87 @@ bareword
 }
 
 func TestParseOpenclawAgents(t *testing.T) {
-	input := `NAME          MODEL
-deepseek-v4   deepseek-v4
----
+	input := `deepseek-v4   deepseek-v4
 claude-sonnet claude-sonnet-4-6
 deepseek-v4   deepseek-v4
 `
 	models := parseOpenclawAgents(input)
-	// header and separator skipped; duplicate deduped.
+	// duplicate deduped; label includes model name.
 	if len(models) != 2 {
 		t.Fatalf("expected 2 agents, got %d: %+v", len(models), models)
 	}
 	if models[0].ID != "deepseek-v4" {
 		t.Errorf("unexpected first agent: %+v", models[0])
 	}
+	if models[0].Label != "deepseek-v4 (deepseek-v4)" {
+		t.Errorf("unexpected label: %+v", models[0])
+	}
 	if models[0].Provider != "openclaw" {
 		t.Errorf("expected provider openclaw, got %q", models[0].Provider)
+	}
+}
+
+func TestParseOpenclawAgentsRejectsDecoratedTUI(t *testing.T) {
+	// Reproduces the shape of real `openclaw agents list` output
+	// that leaked header tokens like "Identity:" / "Workspace:"
+	// and single-character box-drawing icons into the dropdown.
+	input := `╭───────────────────────────────╮
+│                               │
+│  ◇  Agents:                   │
+│  │                            │
+│  │    Identity:               │
+│  │    Workspace:              │
+│  │    Agent                   │
+│  │                            │
+╰───────────────────────────────╯
+deepseek-v4   deepseek-v4
+claude-sonnet claude-sonnet-4-6
+`
+	models := parseOpenclawAgents(input)
+	if len(models) != 2 {
+		t.Fatalf("expected 2 agents (decoration skipped), got %d: %+v", len(models), models)
+	}
+	for _, m := range models {
+		if strings.HasSuffix(m.ID, ":") {
+			t.Errorf("section header leaked into result: %+v", m)
+		}
+	}
+	if models[0].ID != "deepseek-v4" || models[1].ID != "claude-sonnet" {
+		t.Errorf("unexpected agents: %+v", models)
+	}
+}
+
+func TestParseOpenclawAgentsJSONArray(t *testing.T) {
+	input := []byte(`[
+    {"name": "deepseek-v4", "model": "deepseek-v4"},
+    {"name": "claude-sonnet", "model": "claude-sonnet-4-6"}
+]`)
+	models, ok := parseOpenclawAgentsJSON(input)
+	if !ok {
+		t.Fatal("expected parseOpenclawAgentsJSON to accept an array")
+	}
+	if len(models) != 2 {
+		t.Fatalf("got %d, want 2: %+v", len(models), models)
+	}
+	if models[0].ID != "deepseek-v4" || models[0].Label != "deepseek-v4 (deepseek-v4)" {
+		t.Errorf("unexpected first entry: %+v", models[0])
+	}
+}
+
+func TestParseOpenclawAgentsJSONWrapped(t *testing.T) {
+	input := []byte(`{"agents": [{"name": "foo", "model": "bar"}]}`)
+	models, ok := parseOpenclawAgentsJSON(input)
+	if !ok {
+		t.Fatal("expected parseOpenclawAgentsJSON to accept wrapped object")
+	}
+	if len(models) != 1 || models[0].ID != "foo" {
+		t.Errorf("unexpected: %+v", models)
+	}
+}
+
+func TestParseOpenclawAgentsJSONRejectsGarbage(t *testing.T) {
+	if _, ok := parseOpenclawAgentsJSON([]byte("not json")); ok {
+		t.Error("expected ok=false for non-JSON")
 	}
 }
 
