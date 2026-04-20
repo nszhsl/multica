@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -42,19 +43,56 @@ const (
 // max(4, NumCPU). On our prod pods (small CPU request) that resolved to 4,
 // which got fully saturated by the daemon claim/heartbeat traffic and showed
 // up as ~900ms acquire waits on every query.
+//
+// Configuration precedence (highest first):
+//  1. DATABASE_MAX_CONNS / DATABASE_MIN_CONNS env vars
+//  2. pool_max_conns / pool_min_conns query params on DATABASE_URL
+//     (honored natively by pgxpool.ParseConfig)
+//  3. The defaults defined here (defaultMaxConns / defaultMinConns)
+//
+// pgx's own built-in default (max(4, NumCPU)) is intentionally NOT used as a
+// fallback — it is the value that caused the prod incident.
 func newDBPool(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 
-	cfg.MaxConns = envInt32("DATABASE_MAX_CONNS", defaultMaxConns)
-	cfg.MinConns = envInt32("DATABASE_MIN_CONNS", defaultMinConns)
+	urlParams := poolParamsFromURL(dbURL)
+
+	if env := os.Getenv("DATABASE_MAX_CONNS"); env != "" {
+		cfg.MaxConns = envInt32("DATABASE_MAX_CONNS", cfg.MaxConns)
+	} else if !urlParams["pool_max_conns"] {
+		cfg.MaxConns = defaultMaxConns
+	}
+
+	if env := os.Getenv("DATABASE_MIN_CONNS"); env != "" {
+		cfg.MinConns = envInt32("DATABASE_MIN_CONNS", cfg.MinConns)
+	} else if !urlParams["pool_min_conns"] {
+		cfg.MinConns = defaultMinConns
+	}
+
 	if cfg.MinConns > cfg.MaxConns {
 		cfg.MinConns = cfg.MaxConns
 	}
 
 	return pgxpool.NewWithConfig(ctx, cfg)
+}
+
+// poolParamsFromURL returns the set of pool_* query params present on the
+// database URL. Used to detect whether the operator already tuned the pool
+// via the connection string, so env-less upgrades don't silently override
+// existing configuration.
+func poolParamsFromURL(dbURL string) map[string]bool {
+	out := map[string]bool{}
+	u, err := url.Parse(dbURL)
+	if err != nil {
+		return out
+	}
+	for k := range u.Query() {
+		out[k] = true
+	}
+	return out
 }
 
 // envInt32 reads an int32 from the named env var. Empty / invalid values fall
