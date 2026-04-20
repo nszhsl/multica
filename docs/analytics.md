@@ -142,13 +142,21 @@ distinct issues, not tasks.
 | Property | Type | Description |
 |---|---|---|
 | `issue_id` | string (UUID) | |
-| `nth_issue_for_workspace` | int64 | Number of issues in this workspace that have ever reached first execution, including this one. Drives the WAW bucket filters. |
 | `task_duration_ms` | int64 | Wall-clock time between `task.started_at` and `task.completed_at`. Zero when the task was created in a completed state (rare). |
 
 `distinct_id` prefers the issue's human creator so agent-executed events
 flow into the issue-author's person profile (same place `signup` and
 `workspace_created` land). Agent-created issues prefix with `agent:` to
 keep PostHog from merging the agent into a user record.
+
+**Note on workspace-Nth ordinals** — we deliberately do *not* stamp
+`nth_issue_for_workspace` at emit time. Computing it correctly would
+require either a serialised transaction or an advisory lock per workspace;
+two concurrent first-completions could otherwise both read `count=1` and
+emit `n=1`. PostHog answers the same question at query time via
+`row_number() OVER (PARTITION BY properties.workspace_id ORDER BY timestamp)`,
+and funnel steps of the form "workspace has had ≥2 `issue_executed`
+events" are expressible without the property. No information is lost.
 
 ### `team_invite_sent`
 
@@ -175,12 +183,19 @@ expansion funnel.
 
 ### Frontend-only events
 
-- `$pageview` — captured explicitly by the core analytics module on each
-  route change (posthog-js's automatic capture is disabled so we control
-  the event shape).
-- Attribution is NOT a separate event; UTM + referrer origin are stored in
-  the `multica_signup_source` cookie on the first anonymous pageview and
-  read by the backend's `signup` emission.
+- `$pageview` — fired by `apps/web/components/pageview-tracker.tsx` on
+  every Next.js App Router path or query-string change. The tracker
+  mounts once under `WebProviders` and drives the acquisition funnel's
+  `/ → signup` step. posthog-js's automatic pageview capture is
+  disabled in `initAnalytics` so we own the event shape.
+- Attribution is NOT a separate event; UTM + referrer origin are written
+  to the `multica_signup_source` cookie on the first anonymous pageview
+  and read by the backend's `signup` emission. The cookie carries a JSON
+  payload URL-encoded at write time (`encodeURIComponent`) and
+  URL-decoded at read time (`url.QueryUnescape`) — the JSON is never
+  mid-truncated; individual values are capped at 96 chars before
+  `JSON.stringify`, and the entire payload is dropped if it still exceeds
+  512 chars. That way PostHog sees either intact JSON or nothing at all.
 
 ## Governance
 
