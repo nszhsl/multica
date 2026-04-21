@@ -285,18 +285,17 @@ export const zh: LandingDict = {
       {
         version: "0.2.11",
         date: "2026-04-21",
-        title: "分析埋点、桌面应用跨平台打包与看板分页",
+        title: "桌面应用跨平台打包、CLI 自更新与看板分页",
         changes: [],
         features: [
-          "新增产品埋点管线与激活漏斗事件，支撑新用户转化与留存分析",
           "桌面应用跨平台打包——同一条发布流水线产出 macOS、Windows 和 Linux 安装包",
+          "新增 `multica update` 自更新命令——无需重装即可升级 CLI 和本地 Daemon",
           "Issue 看板所有状态列都支持分页（不再只是 Done 列），大积压下依然流畅",
         ],
         fixes: [
           "本地 Daemon 对 Agent 执行强制端到端工作区隔离（安全）",
-          "新增 `multica update` 自更新命令；Windows 下 Daemon 终端关闭后继续常驻",
+          "Windows 下 Daemon 终端关闭后继续常驻，后台 Agent 不再被意外终止",
           "看板卡片重新显示描述预览——列表查询不再丢掉 description 字段",
-          "默认关闭 PostHog 自动采集与会话回放——埋点改为按需开启，降噪并保护隐私",
           "评论 Markdown 全链路保留——移除会误伤格式的 HTML sanitizer",
         ],
       },

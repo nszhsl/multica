@@ -285,18 +285,17 @@ export const en: LandingDict = {
       {
         version: "0.2.11",
         date: "2026-04-21",
-        title: "Analytics Pipeline, Desktop Cross-Platform Packaging & Board Pagination",
+        title: "Desktop Cross-Platform Packaging, CLI Self-Update & Board Pagination",
         changes: [],
         features: [
-          "Product analytics pipeline with activation funnel events powering onboarding and retention insights",
           "Desktop app cross-platform packaging — macOS, Windows, and Linux artifacts from a single release pipeline",
+          "`multica update` self-update command — upgrade the CLI and local daemon without reinstalling",
           "Issue board paginates every status column, not only Done — large backlogs stay responsive",
         ],
         fixes: [
           "Workspace isolation enforced end-to-end for agent execution on the local daemon (security)",
-          "`multica update` self-update command, and the Windows daemon now stays alive after the terminal closes",
+          "Windows daemon stays alive after the terminal closes, so background agents keep running",
           "Board cards render their description preview again — list queries no longer strip the description field",
-          "PostHog autocapture and session recording disabled by default — opt-in only, noisier telemetry off",
           "Comment Markdown preserved end-to-end — the HTML sanitizer that was stripping formatting has been removed",
         ],
       },
