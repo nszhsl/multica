@@ -32,10 +32,12 @@ export function TasksTab({ agent }: { agent: Agent }) {
   // through `issueDetailOptions` is the reliable lookup path (and it shares
   // the same cache as the issue detail page).
   //
-  // Autopilot `run_only` tasks have no linked issue; the server serializes
-  // that as issue_id = "". Filter those out before issuing detail queries
-  // so we don't hit `/api/issues/` with an empty id (which was crashing
-  // the whole tab).
+  // Not every task has a linked issue — autopilot `run_only` runs and
+  // chat-spawned tasks both persist with NULL issue_id, which the server
+  // serializes as "". Filter those out before issuing detail queries so we
+  // don't hit `/api/issues/` with an empty id (which was crashing the
+  // whole tab). The UI treats the two cases the same here; a follow-up
+  // will surface the task source once the server exposes it.
   const issueIds = useMemo(
     () => Array.from(new Set(tasks.map((t) => t.issue_id).filter((id) => id !== ""))),
     [tasks],
@@ -104,8 +106,9 @@ export function TasksTab({ agent }: { agent: Agent }) {
           {sortedTasks.map((task) => {
             const config = taskStatusConfig[task.status] ?? taskStatusConfig.queued!;
             const Icon = config.icon;
-            // Autopilot run_only tasks carry issue_id = "" — skip the lookup
-            // and render them as non-link rows labeled "Autopilot run".
+            // Tasks without a linked issue (autopilot run_only, chat-spawned,
+            // etc.) carry issue_id = "" — skip the lookup and render them
+            // as non-link rows.
             const hasIssue = task.issue_id !== "";
             const issue = hasIssue ? issueMap.get(task.issue_id) : undefined;
             const isActive = task.status === "running" || task.status === "dispatched";
@@ -133,7 +136,7 @@ export function TasksTab({ agent }: { agent: Agent }) {
                       </span>
                     )}
                     <span className={`text-sm truncate ${isActive ? "font-medium" : ""}`}>
-                      {issue?.title ?? (hasIssue ? `Issue ${task.issue_id.slice(0, 8)}...` : "Autopilot run")}
+                      {issue?.title ?? (hasIssue ? `Issue ${task.issue_id.slice(0, 8)}...` : "Task without linked issue")}
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
