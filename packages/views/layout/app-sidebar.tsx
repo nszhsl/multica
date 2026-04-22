@@ -28,6 +28,7 @@ import {
   SquarePen,
   CircleUser,
   FolderKanban,
+  Sparkles,
   X,
   Zap,
 } from "lucide-react";
@@ -415,6 +416,22 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
+                    {/* Plain anchor with target=_blank works on both web
+                        (new tab) and desktop (intercepted by the main
+                        process's setWindowOpenHandler → openExternalSafely),
+                        so the shared component doesn't need to branch. */}
+                    <DropdownMenuItem
+                      render={
+                        <a
+                          href="https://multica.ai/changelog"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        />
+                      }
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      What&apos;s new
+                    </DropdownMenuItem>
                     <DropdownMenuItem variant="destructive" onClick={logout}>
                       <LogOut className="h-3.5 w-3.5" />
                       Log out
@@ -599,6 +616,15 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                   </div>
                 </div>
                 <div className="p-1">
+                  <a
+                    href="https://multica.ai/changelog"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-accent transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    What&apos;s new
+                  </a>
                   <button
                     onClick={logout}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
