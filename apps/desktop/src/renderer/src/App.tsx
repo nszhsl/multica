@@ -189,12 +189,14 @@ async function handleDaemonLogout() {
 }
 
 export default function App() {
+  const { version, os } = window.desktopAPI.appInfo;
   return (
     <ThemeProvider>
       <CoreProvider
         apiBaseUrl={import.meta.env.VITE_API_URL || "http://localhost:8080"}
         wsUrl={import.meta.env.VITE_WS_URL || "ws://localhost:8080/ws"}
         onLogout={handleDaemonLogout}
+        identity={{ platform: "desktop", version, os }}
       >
         <AppContent />
       </CoreProvider>

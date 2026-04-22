@@ -58,9 +58,13 @@ type Daemon struct {
 // New creates a new Daemon instance.
 func New(cfg Config, logger *slog.Logger) *Daemon {
 	cacheRoot := filepath.Join(cfg.WorkspacesRoot, ".repos")
+	client := NewClient(cfg.ServerBaseURL)
+	// Tag every daemon HTTP request with the daemon's CLI version so the
+	// server can split logs/metrics by client version (parallel to the CLI).
+	client.SetVersion(cfg.CLIVersion)
 	return &Daemon{
 		cfg:           cfg,
-		client:        NewClient(cfg.ServerBaseURL),
+		client:        client,
 		repoCache:     repocache.New(cacheRoot, logger),
 		logger:        logger,
 		workspaces:    make(map[string]*workspaceState),

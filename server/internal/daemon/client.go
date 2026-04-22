@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -41,13 +42,55 @@ type Client struct {
 	baseURL string
 	token   string
 	client  *http.Client
+
+	// Identity headers sent on every request as X-Client-*. Populated by
+	// SetIdentity(); empty values are simply omitted.
+	platform string
+	version  string
+	os       string
 }
 
 // NewClient creates a new daemon API client.
 func NewClient(baseURL string) *Client {
 	return &Client{
-		baseURL: baseURL,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		baseURL:  baseURL,
+		client:   &http.Client{Timeout: 30 * time.Second},
+		platform: "daemon",
+		os:       normalizeGOOS(runtime.GOOS),
+	}
+}
+
+// normalizeGOOS maps Go's runtime.GOOS values to the protocol vocabulary
+// used by X-Client-OS / client_os ("macos" / "windows" / "linux").
+func normalizeGOOS(goos string) string {
+	switch goos {
+	case "darwin":
+		return "macos"
+	case "windows":
+		return "windows"
+	case "linux":
+		return "linux"
+	default:
+		return goos
+	}
+}
+
+// SetVersion records the daemon's CLI version, sent as X-Client-Version.
+// Called by Daemon.Run after config is loaded.
+func (c *Client) SetVersion(v string) {
+	c.version = v
+}
+
+// setIdentityHeaders attaches X-Client-Platform/Version/OS to req when set.
+func (c *Client) setIdentityHeaders(req *http.Request) {
+	if c.platform != "" {
+		req.Header.Set("X-Client-Platform", c.platform)
+	}
+	if c.version != "" {
+		req.Header.Set("X-Client-Version", c.version)
+	}
+	if c.os != "" {
+		req.Header.Set("X-Client-OS", c.os)
 	}
 }
 
@@ -276,6 +319,7 @@ func (c *Client) postJSON(ctx context.Context, path string, reqBody any, respBod
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
+	c.setIdentityHeaders(req)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -302,6 +346,7 @@ func (c *Client) getJSON(ctx context.Context, path string, respBody any) error {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
+	c.setIdentityHeaders(req)
 
 	resp, err := c.client.Do(req)
 	if err != nil {

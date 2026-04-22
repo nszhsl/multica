@@ -69,9 +69,24 @@ import { type Logger, noopLogger } from "../logger";
 import { createRequestId } from "../utils";
 import { getCurrentSlug } from "../platform/workspace-storage";
 
+/** Identifies the calling client to the server.
+ *  Sent on every HTTP request as X-Client-Platform / X-Client-Version /
+ *  X-Client-OS so the backend can log, gate, or split metrics by client.
+ *  See server/internal/middleware/client.go for the receiving end. */
+export interface ApiClientIdentity {
+  /** Logical client kind. Server expects: "web" | "desktop" | "cli" | "daemon". */
+  platform?: string;
+  /** Client/app version string (e.g. "0.1.0", git tag, commit). */
+  version?: string;
+  /** Operating system the client is running on: "macos" | "windows" | "linux". */
+  os?: string;
+}
+
 export interface ApiClientOptions {
   logger?: Logger;
   onUnauthorized?: () => void;
+  /** Identifies the client to the server. Sent as X-Client-* headers. */
+  identity?: ApiClientIdentity;
 }
 
 export interface LoginResponse {
@@ -172,6 +187,10 @@ export class ApiClient {
     if (slug) headers["X-Workspace-Slug"] = slug;
     const csrf = this.readCsrfToken();
     if (csrf) headers["X-CSRF-Token"] = csrf;
+    const id = this.options.identity;
+    if (id?.platform) headers["X-Client-Platform"] = id.platform;
+    if (id?.version) headers["X-Client-Version"] = id.version;
+    if (id?.os) headers["X-Client-OS"] = id.os;
     return headers;
   }
 
