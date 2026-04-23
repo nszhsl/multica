@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -46,6 +48,10 @@ var setupSelfHostCmd = &cobra.Command{
 By default, connects to http://localhost:8080 (backend) and http://localhost:3000 (frontend).
 Use --server-url and --app-url to specify a custom server (e.g. an on-premise deployment).
 
+If you run this command from a different machine than the server, also pass
+--callback-host <FQDN-or-IP-the-browser-can-reach-back-to-this-machine-on> so
+the OAuth login flow can return the token to the CLI.
+
 Examples:
   multica setup self-host
   multica setup self-host --server-url https://api.internal.co --app-url https://app.internal.co
@@ -58,6 +64,7 @@ func init() {
 	setupSelfHostCmd.Flags().String("app-url", "", "Frontend app URL (e.g. https://app.internal.co)")
 	setupSelfHostCmd.Flags().Int("port", 8080, "Backend server port (used when --server-url is not set)")
 	setupSelfHostCmd.Flags().Int("frontend-port", 3000, "Frontend port (used when --app-url is not set)")
+	setupSelfHostCmd.Flags().String(callbackHostFlag, "", "Host the OAuth callback URL points at (auto-detected when empty). Use this for reverse-proxy / FQDN setups.")
 
 	setupCmd.AddCommand(setupCloudCmd)
 	setupCmd.AddCommand(setupSelfHostCmd)
@@ -159,13 +166,24 @@ func runSetupSelfHost(cmd *cobra.Command, args []string) error {
 	appURL, _ := cmd.Flags().GetString("app-url")
 	port, _ := cmd.Flags().GetInt("port")
 	frontendPort, _ := cmd.Flags().GetInt("frontend-port")
+	userProvidedServerURL := serverURL != ""
 
 	// If custom URLs provided, use them; otherwise default to localhost with ports.
 	if serverURL == "" {
 		serverURL = fmt.Sprintf("http://localhost:%d", port)
 	}
 	if appURL == "" {
-		appURL = fmt.Sprintf("http://localhost:%d", frontendPort)
+		// Silently defaulting app_url to localhost is wrong when the user
+		// pointed --server-url at a remote host: the browser login flow
+		// will open a broken localhost URL. Infer app_url from the server
+		// host and warn, so the user can override with --app-url if needed.
+		if userProvidedServerURL && !serverHostIsLocal(serverURL) {
+			appURL = deriveAppURLFromServerURL(serverURL, frontendPort)
+			fmt.Fprintf(os.Stderr, "⚠ --app-url not provided; inferring %s from --server-url.\n", appURL)
+			fmt.Fprintln(os.Stderr, "  If your frontend is on a different host/port, re-run with --app-url.")
+		} else {
+			appURL = fmt.Sprintf("http://localhost:%d", frontendPort)
+		}
 	}
 
 	cfg := cli.CLIConfig{
@@ -201,6 +219,35 @@ func runSetupSelfHost(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(os.Stderr, "\n✓ Setup complete! Your machine is now connected to Multica.")
 
 	return nil
+}
+
+// serverHostIsLocal reports whether serverURL points at the same machine as
+// the CLI (loopback literal or "localhost"). Used to decide whether to infer
+// app_url from server_url or fall back to the local-dev default.
+func serverHostIsLocal(serverURL string) bool {
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		return false
+	}
+	h := parsed.Hostname()
+	if h == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// deriveAppURLFromServerURL builds a reasonable app_url from a remote
+// server_url: same host, http scheme, frontendPort. Users can still
+// override with --app-url for reverse-proxy / FQDN setups.
+func deriveAppURLFromServerURL(serverURL string, frontendPort int) string {
+	parsed, err := url.Parse(serverURL)
+	if err != nil || parsed.Hostname() == "" {
+		return fmt.Sprintf("http://localhost:%d", frontendPort)
+	}
+	return fmt.Sprintf("http://%s:%d", parsed.Hostname(), frontendPort)
 }
 
 // probeServer checks whether a Multica backend is reachable at the given URL.
