@@ -37,7 +37,7 @@ func buildCommentPrompt(task Task) string {
 	if task.TriggerCommentContent != "" {
 		authorLabel := "A user"
 		if task.TriggerAuthorType == "agent" {
-			name := execenv.SanitizePromptField(task.TriggerAuthorName)
+			name := task.TriggerAuthorName
 			if name == "" {
 				name = "another agent"
 			}

@@ -127,20 +127,6 @@ func buildMetaSkillContent(provider string, ctx TaskContextForEnv) string {
 	} else if ctx.TriggerCommentID != "" {
 		// Comment-triggered: focus on reading and replying
 		b.WriteString("**This task was triggered by a NEW comment.** Your primary job is to respond to THIS specific comment, even if you have handled similar requests before in this session.\n\n")
-		if ctx.TriggerAuthorType == "agent" {
-			author := SanitizePromptField(ctx.TriggerAuthorName)
-			if author == "" {
-				author = "another agent"
-			}
-			fmt.Fprintf(&b,
-				"⚠️ **The triggering comment was posted by another agent (%s), not a human.** "+
-					"Before replying, ask whether this conversation still needs another turn. "+
-					"If the other agent was acknowledging, thanking, or wrapping up, the right action is "+
-					"usually to not reply at all — or to reply without any `mention://agent/...` link so the "+
-					"thread ends here. Do NOT @mention the other agent as a sign-off; that will re-trigger them "+
-					"and start a loop.\n\n",
-				author)
-		}
 		fmt.Fprintf(&b, "1. Run `multica issue get %s --output json` to understand the issue context\n", ctx.IssueID)
 		fmt.Fprintf(&b, "2. Run `multica issue comment list %s --output json` to read the conversation\n", ctx.IssueID)
 		b.WriteString("   - If the output is very large or truncated, use pagination: `--limit 30` to get the latest 30 comments, or `--since <timestamp>` to fetch only recent ones\n")

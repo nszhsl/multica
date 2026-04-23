@@ -1363,17 +1363,9 @@ func TestReadGCMeta_NoFile(t *testing.T) {
 func TestInjectRuntimeConfigMentionLoopHardening(t *testing.T) {
 	t.Parallel()
 
-	agentTriggerCtx := TaskContextForEnv{
-		IssueID:           "issue-1",
-		TriggerCommentID:  "comment-1",
-		TriggerAuthorType: "agent",
-		TriggerAuthorName: "Atlas",
-	}
-	memberTriggerCtx := TaskContextForEnv{
-		IssueID:           "issue-1",
-		TriggerCommentID:  "comment-1",
-		TriggerAuthorType: "member",
-		TriggerAuthorName: "Alice",
+	commentTriggerCtx := TaskContextForEnv{
+		IssueID:          "issue-1",
+		TriggerCommentID: "comment-1",
 	}
 	assignmentCtx := TaskContextForEnv{IssueID: "issue-1"}
 
@@ -1417,29 +1409,20 @@ func TestInjectRuntimeConfigMentionLoopHardening(t *testing.T) {
 		}
 	})
 
-	t.Run("agent-triggered-comment-labels-author-as-agent", func(t *testing.T) {
+	t.Run("workflow-carries-silence-as-exit-and-no-signoff-mention", func(t *testing.T) {
 		t.Parallel()
-		s := readClaudeMD(t, agentTriggerCtx)
+		s := readClaudeMD(t, commentTriggerCtx)
+		// The anti-loop signal for CLAUDE.md lives in the numbered workflow
+		// steps (4 + 5), not in a dedicated preamble. Lock in the key phrases
+		// so the signal can't decay back into pure prose again.
 		for _, want := range []string{
-			"posted by another agent (Atlas)",
-			"start a loop",
 			"Decide whether a reply is warranted",
 			"Silence is a valid and preferred way",
+			"Never @mention the agent you are replying to as a thank-you or sign-off",
 		} {
 			if !strings.Contains(s, want) {
-				t.Errorf("agent-triggered CLAUDE.md missing %q", want)
+				t.Errorf("comment-triggered CLAUDE.md missing %q", want)
 			}
-		}
-	})
-
-	t.Run("member-triggered-comment-does-not-warn-about-loops", func(t *testing.T) {
-		t.Parallel()
-		s := readClaudeMD(t, memberTriggerCtx)
-		// The anti-loop preamble is specific to agent-authored triggers; a human
-		// asking an agent to do work should not be discouraged from getting a
-		// reply.
-		if strings.Contains(s, "posted by another agent") {
-			t.Errorf("member-triggered CLAUDE.md should not claim the author was another agent")
 		}
 	})
 }

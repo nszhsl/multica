@@ -33,8 +33,6 @@ type PrepareParams struct {
 type TaskContextForEnv struct {
 	IssueID           string
 	TriggerCommentID  string // comment that triggered this task (empty for on_assign)
-	TriggerAuthorType string // "agent" or "member"; empty when no triggering comment
-	TriggerAuthorName string // display name of the triggering comment author
 	AgentID           string // unique ID of the dispatched agent
 	AgentName         string
 	AgentInstructions string // agent identity/persona instructions, injected into CLAUDE.md
