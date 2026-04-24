@@ -193,29 +193,30 @@ func (s *S3Storage) PresignPut(ctx context.Context, key string, contentType stri
 	if expiresIn <= 0 {
 		expiresIn = 15 * time.Minute
 	}
-	safe := sanitizeFilename(filename)
-	disposition := "attachment"
-	if isInlineContentType(contentType) {
-		disposition = "inline"
-	}
 	ps := s3.NewPresignClient(s.client)
+	// Keep the signed input minimal — only headers the client can easily
+	// reproduce on its PUT (Content-Type). Do NOT sign Content-Disposition
+	// here: the client would have to echo it byte-for-byte and 99% of
+	// clients (curl --upload-file, boto3, plain fetch) don't set it by
+	// default, so the PUT would fail with SignatureDoesNotMatch. If the
+	// caller needs a friendly download filename later, use
+	// response-content-disposition query params on the GET URL instead.
 	req, err := ps.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:             aws.String(s.bucket),
-		Key:                aws.String(key),
-		ContentType:        aws.String(contentType),
-		ContentDisposition: aws.String(fmt.Sprintf(`%s; filename="%s"`, disposition, safe)),
-		StorageClass:       s.storageClass(),
+		Bucket:       aws.String(s.bucket),
+		Key:          aws.String(key),
+		ContentType:  aws.String(contentType),
+		StorageClass: s.storageClass(),
 	}, func(o *s3.PresignOptions) {
 		o.Expires = expiresIn
 	})
 	if err != nil {
 		return nil, fmt.Errorf("presign PutObject: %w", err)
 	}
-	// Caller must echo the signed headers exactly. Per AWS SigV4 rules,
-	// Content-Type is signed; the client MUST set it to the same string
-	// we passed above or S3 rejects the PUT with SignatureDoesNotMatch.
-	// Other headers that went into the signature but are optional for
-	// the client to re-set are not surfaced here.
+	// Client MUST send the same Content-Type on the PUT — SigV4 signs
+	// it. filename parameter is kept for API symmetry with Upload()
+	// but is intentionally unused on this path; it's already part of
+	// the attachment record.
+	_ = filename
 	headers := map[string]string{
 		"Content-Type": contentType,
 	}
