@@ -33,6 +33,9 @@ func (m *mockStorage) PresignPut(_ context.Context, key string, _ string, _ stri
 		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}, nil
 }
+func (m *mockStorage) PresignGet(_ context.Context, key string, _ time.Duration) (string, error) {
+	return fmt.Sprintf("https://presign.example.com/%s?sig=mock-get", key), nil
+}
 func (m *mockStorage) StatObject(_ context.Context, _ string) (int64, error) {
 	return 123456, nil
 }

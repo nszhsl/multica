@@ -132,6 +132,13 @@ func (s *LocalStorage) PresignPut(ctx context.Context, key string, contentType s
 	return nil, ErrPresignUnsupported
 }
 
+// PresignGet — not supported. Local files are served by the same-
+// process /uploads/* handler; PublicURL points at that handler
+// directly (no signing involved).
+func (s *LocalStorage) PresignGet(ctx context.Context, key string, expiresIn time.Duration) (string, error) {
+	return "", ErrPresignUnsupported
+}
+
 // PublicURL returns the public (served-by-this-server) URL for an
 // already-staged file under the local upload dir.
 func (s *LocalStorage) PublicURL(key string) string {

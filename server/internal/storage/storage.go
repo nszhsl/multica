@@ -32,6 +32,13 @@ type Storage interface {
 	// this (LocalStorage) should return (nil, ErrPresignUnsupported).
 	PresignPut(ctx context.Context, key string, contentType string, filename string, expiresIn time.Duration) (*PresignedUpload, error)
 
+	// PresignGet returns a time-limited URL that lets an un-authenticated
+	// client GET the object. Used for attachment download when the bucket
+	// itself is private (no public-read ACL). Backends that don't support
+	// signed reads (LocalStorage) should return ErrPresignUnsupported; the
+	// caller should fall back to the stable PublicURL.
+	PresignGet(ctx context.Context, key string, expiresIn time.Duration) (string, error)
+
 	// PublicURL returns the stable public URL for an already-uploaded
 	// object, without uploading anything. Used after a successful
 	// client-side PUT via PresignPut so the attachment record can point
