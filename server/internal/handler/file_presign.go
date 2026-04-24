@@ -161,7 +161,7 @@ func (h *Handler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Error("PresignPut failed",
 			append(logger.RequestAttrs(r), "key", key, "error", err)...)
-		writeError(w, http.StatusInternalServerError, "failed to issue upload URL")
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to issue upload URL: %v", err))
 		return
 	}
 
