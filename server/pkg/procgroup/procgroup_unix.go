@@ -42,7 +42,9 @@ func (p *platJob) close() error {
 	if p.pgid == 0 {
 		return nil
 	}
-	if err := syscall.Kill(-p.pgid, syscall.SIGKILL); err != nil {
+	pgid := p.pgid
+	p.pgid = 0
+	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil {
 		if errors.Is(err, syscall.ESRCH) {
 			return nil
 		}
