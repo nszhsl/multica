@@ -51,6 +51,13 @@ var (
 )
 
 // Counters returns a snapshot of the current counters.
+//
+// Each field is monotonic and read atomically, but the four fields
+// are loaded independently — no cross-field consistency is
+// guaranteed. Cross-field arithmetic (e.g. JobsCreated - JobsClosed
+// to estimate "in-flight Jobs") may briefly observe inconsistent
+// values during concurrent activity. Treat each counter as an
+// independent monotonic series for /health observability.
 func Counters() Stats {
 	return Stats{
 		JobsCreated:    jobsCreated.Load(),
@@ -107,6 +114,13 @@ func (j *Job) Attach(p *os.Process) error {
 
 // Close terminates every process in the Job and releases the
 // underlying handle. Idempotent: second and later calls are no-ops.
+//
+// JobsClosed is incremented exactly once per Job, on the first
+// successful Close. Idempotent no-op calls do not increment.
+// The counter does NOT reflect whether the underlying platform
+// close (CloseHandle / kill -PGID) succeeded — once Close is
+// entered, the in-process Job state is considered retired even if
+// the syscall returned an error.
 func (j *Job) Close() error {
 	if j == nil {
 		return nil
@@ -143,10 +157,11 @@ func Start(cmd *exec.Cmd) (cleanup func(), err error) {
 		return func() {}, err
 	}
 
-	if attachErr := job.Attach(cmd.Process); attachErr != nil {
-		// Degrade: cmd is running, but unattached. Still close the Job
-		// so we don't leak a handle. cleanup is now a no-op for the
-		// running process tree.
+	// Attach failures are recorded via the attachFailures counter
+	// (see Job.Attach). The cmd is already running; degrade by
+	// closing the Job (releases the handle) and returning a
+	// no-op cleanup so the caller's defer is still safe.
+	if err := job.Attach(cmd.Process); err != nil {
 		_ = job.Close()
 		return func() {}, nil
 	}
